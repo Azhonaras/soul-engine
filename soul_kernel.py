@@ -1,5 +1,5 @@
 """
-Soul System Core Kernel v0.4.0
+Soul System Core Kernel v1.0.0
 Normative Source: soul-constitution-v0.2.md & soul-system-architecture.json
 Features:
  1. Concurrency Hardening: BEGIN IMMEDIATE on writes, PRAGMA user_version migrations, and passive WAL checkpoints

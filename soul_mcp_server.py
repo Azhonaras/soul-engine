@@ -1,5 +1,5 @@
 """
-Soul System Model Context Protocol (MCP) Server v0.4.0
+Soul System Model Context Protocol (MCP) Server v1.0.0
 Normative Source: soul-constitution-v0.2.md & soul-system-architecture.json
 """
 
@@ -384,7 +384,7 @@ TOOLS = [
 # JSON-RPC / MCP STDIO SERVER HANDLER
 # ==============================================================================
 
-SERVER_INFO = {"name": "soul-mcp-server", "version": "0.4.0"}
+SERVER_INFO = {"name": "soul-mcp-server", "version": "1.0.0"}
 CAPABILITIES = {"tools": {"listChanged": False}}
 
 
