@@ -73,6 +73,6 @@ When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you **must**
 
 ## 👥 Core Contributors
 
-* **Azhonaras (NBada)** — Project Creator & Lead Architect
-* **Antigravity (UPI)** — Co-Creator, Core Architecture & Verification Contributor (Google DeepMind)
-* **Soul Open Source Community** — Contributions, Bug Reports & PRs
+* **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
+* **Antigravity (UPI)** — Co-designer, Implementation & Verification Assistant (Google DeepMind)
+* **Soul Open Source Community** — Contributions, Feedback & Testing
