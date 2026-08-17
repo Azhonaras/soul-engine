@@ -7,6 +7,7 @@ name = "soul-engine"
 version = "1.0.0"
 authors = [
   { name="Azhonaras (NBada)", email="contact@soul-engine.dev" },
+  { name="Antigravity (UPI)", email="antigravity@google.com" },
 ]
 description = "Epistemic Bio-Homeostatic Identity & Memory Kernel for AI Agents with Model Context Protocol (MCP) Interface"
 readme = "README.md"

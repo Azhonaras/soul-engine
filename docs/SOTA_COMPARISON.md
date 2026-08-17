@@ -1,6 +1,6 @@
-# Industry Landscape Benchmark: Soul v0.4 vs. State-of-the-Art Agent Memory Systems
+# Industry Landscape Benchmark: Soul Engine (v1.0.0) vs. State-of-the-Art Agent Memory Systems
 
-This report provides an empirical and architectural comparison between **Soul v0.4** and leading industry agent memory frameworks: **Mem0**, **Letta (MemGPT)**, **Zep (Graphiti)**, and **Cognee**.
+This report provides an empirical and architectural comparison between **Soul Engine (v1.0.0)** and leading industry agent memory frameworks: **Mem0**, **Letta (MemGPT)**, **Zep (Graphiti)**, and **Cognee**.
 
 ---
 
@@ -13,7 +13,7 @@ graph TD
         B["Agent Operating System / Runtime"] --> Letta["Letta / MemGPT<br/>(Core RAM + Archival Disk)"]
         C["Bi-Temporal Graph Engine"] --> Zep["Zep / Graphiti<br/>(Temporal Event Lineage)"]
         D["Enterprise Knowledge ETL"] --> Cognee["Cognee<br/>(Extract, Cognify, Load)"]
-        E["Epistemic Authority & Bio-Homeostasis"] --> Soul["Soul v0.4<br/>(Epistemic Rank + Neuromodulation + MCP)"]
+        E["Epistemic Authority & Bio-Homeostasis"] --> Soul["Soul Engine (v1.0.0)<br/>(Epistemic Rank + Neuromodulation + MCP)"]
     end
 ```
 
@@ -21,7 +21,7 @@ graph TD
 
 ## 2. Comparative Capability & Feature Matrix
 
-| Capability / Dimension | **Soul v0.4** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Cognee** |
+| Capability / Dimension | **Soul Engine (v1.0.0)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Cognee** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Primary Paradigm** | Epistemic Identity & Bio-Homeostasis | Semantic Memory SDK | Virtual OS Runtime | Bi-Temporal Graph | Knowledge Base ETL |
 | **Epistemic Authority Hierarchy** | **Yes ($\text{verified} > \dots > \text{imagined}$)** | No (Flat facts) | No (Unweighted) | No (Time-based only) | No (Ontological only) |
@@ -47,7 +47,7 @@ graph TD
  • Letta         : Ingests into archival memory without authority verification. [VULNERABLE]
  • Zep           : Creates newer temporal edge invalidating older fact. [VULNERABLE]
  • Cognee        : Creates parallel graph relation. [AMBIGUOUS]
- • Soul v0.4     : Evaluates Epistemic Rank (reported < verified) -> Quarantines claim as 
+ • Soul Engine   : Evaluates Epistemic Rank (reported < verified) -> Quarantines claim as 
                    Contradicted Tension -> Preserves Ground Truth. [IMMUNE]
 ```
 
@@ -55,9 +55,9 @@ graph TD
 
 ## 4. Summary & Strategic Differentiation
 
-| Framework | Ideal Use Case | Soul v0.4 Advantage Over Them |
+| Framework | Ideal Use Case | Soul Engine Advantage Over Them |
 | :--- | :--- | :--- |
-| **Mem0** | Fast, lightweight semantic facts for simple chat apps | **Soul** adds epistemic truth verification, trait governance, and bio-homeostatic rewards. |
-| **Letta** | Long-running autonomous agents managing their own RAM | **Soul** operates as a universal MCP standard without forcing the agent to rewrite its execution loop. |
-| **Zep** | Conversational timeline tracking with exact historical queries | **Soul** provides active defense against memory poisoning while remaining $100\%$ local and dependency-light. |
-| **Cognee** | Complex enterprise document ingestion and graph traversal | **Soul** specializes in autonomous agent behavioral consistency, emotional equilibrium, and identity protection. |
+| **Mem0** | Fast, lightweight semantic facts for simple chat apps | **Soul Engine** adds epistemic truth verification, trait governance, and bio-homeostatic rewards. |
+| **Letta** | Long-running autonomous agents managing their own RAM | **Soul Engine** operates as a universal MCP standard without forcing the agent to rewrite its execution loop. |
+| **Zep** | Conversational timeline tracking with exact historical queries | **Soul Engine** provides active defense against memory poisoning while remaining $100\%$ local and dependency-light. |
+| **Cognee** | Complex enterprise document ingestion and graph traversal | **Soul Engine** specializes in autonomous agent behavioral consistency, emotional equilibrium, and identity protection. |

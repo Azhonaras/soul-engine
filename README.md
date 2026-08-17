@@ -161,7 +161,15 @@ python examples/demo_live_agent.py
 
 ---
 
-## 📄 License & Attribution
+## 👥 Authors & Contributors
+
+* **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
+* **Antigravity (UPI)** — Co-designer, Implementation & Verification Assistant (Google DeepMind)
+* **Soul Open Source Community** — Contributions, Feedback & Testing
+
+---
+
+## 📄 License
 
 Soul Engine is released under the open-source [MIT License](LICENSE).  
-Created and maintained by **Azhonaras (NBada)** (2026).
+Copyright (c) 2026 Azhonaras (NBada), Antigravity (UPI), and Soul Contributors.

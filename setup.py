@@ -6,7 +6,7 @@ setup(
     description="Epistemic Bio-Homeostatic Identity & Memory Kernel for AI Agents with Model Context Protocol (MCP) Interface",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    author="NBada",
+    author="Azhonaras (NBada), Antigravity (UPI)",
     packages=find_packages(),
     py_modules=["soul_kernel", "soul_mcp_server", "install"],
     install_requires=[

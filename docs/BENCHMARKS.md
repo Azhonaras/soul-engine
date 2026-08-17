@@ -6,7 +6,7 @@ This benchmark evaluates all four architectural generations of the **Soul Episte
 
 ## 1. Executive Benchmark Summary Table
 
-| Metric / Benchmark Vector | Test Standard / Constraint | v0.1 (Blueprint) | v0.2 (Constitution) | v0.3 (MCP Prototype) | v0.4 (Hardened Core) | Target SLA |
+| Metric / Benchmark Vector | Test Standard / Constraint | v0.1 (Blueprint) | v0.2 (Constitution) | v0.3 (MCP Prototype) | v1.0 (Production Core) | Target SLA |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Throughput (Ops / Sec)** | 20-Thread Mixed R/W Load | N/A | 8.2 ops/s | 42.5 ops/s | **113.6 ops/s** | $\ge 50\text{ ops/s}$ |
 | **ACID Version Collision Rate** | Rapid Concurrent Writes | N/A | 38.0% | 12.8% | **0.0%** | $0.0\%$ |
@@ -37,7 +37,7 @@ This benchmark evaluates all four architectural generations of the **Soul Episte
    600 |                                       /
    400 |                                      /
    200 |                                     /
-     4 | -----------------------------------•-----------------• v0.4 (O(1) Two-Stage Hybrid)
+      4 | -----------------------------------•-----------------• v1.0 (O(1) Two-Stage Hybrid)
      0 └────────────────────────────────────────────────────────
        N=10         N=100                 N=500              N=1000
                                Memories in Database
