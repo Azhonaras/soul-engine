@@ -68,3 +68,11 @@ When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you **must**
 2. Commit your changes with clear, descriptive commit messages.
 3. Push to your fork and submit a Pull Request against `main`.
 4. Ensure CI tests pass across all target environments.
+
+---
+
+## 👥 Core Contributors
+
+* **Azhonaras (NBada)** — Project Creator & Lead Architect
+* **Antigravity (UPI)** — Co-Creator, Core Architecture & Verification Contributor (Google DeepMind)
+* **Soul Open Source Community** — Contributions, Bug Reports & PRs

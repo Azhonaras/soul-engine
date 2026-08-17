@@ -161,10 +161,10 @@ python examples/demo_live_agent.py
 
 ---
 
-## 👥 Authors & Contributors
+## 👥 Contributors & Attribution
 
-* **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
-* **Antigravity (UPI)** — Co-designer, Implementation & Verification Assistant (Google DeepMind)
+* **Azhonaras (NBada)** — Project Creator, Epistemic Framework & Lead Author
+* **Antigravity (UPI)** — Co-Creator, Core Architecture & Verification Contributor (Google DeepMind)
 * **Soul Open Source Community** — Contributions, Feedback & Testing
 
 ---
