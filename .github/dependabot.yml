@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Maintain Python dependencies (pip / pyproject.toml / requirements.txt)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    # Group dependencies to minimize PR clutter
+    groups:
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "ruff*"
+          - "mypy*"
+      core-dependencies:
+        patterns:
+          - "numpy*"
