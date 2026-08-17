@@ -1,0 +1,1 @@
+{"name":"soul_update_trait","description":"Propose an update to a bounded control trait parameter (e.g. sycophancy, audacity, epistemic_humility).","parameters":{"properties":{"evidence_refs":{"items":{"type":"string"},"type":"array"},"is_human_approved":{"type":"boolean"},"new_value":{"type":"number"},"trait":{"type":"string"}},"required":["trait","new_value"],"type":"object"}}

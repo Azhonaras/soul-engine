@@ -1,0 +1,1 @@
+{"name":"soul_recall","description":"Search and retrieve active memories via Reciprocal Rank Fusion (RRF) Hybrid, Dense Vector, or BM25 search.","parameters":{"properties":{"limit":{"default":5,"type":"integer"},"query":{"description":"Search query","type":"string"},"search_mode":{"default":"rrf_hybrid","enum":["rrf_hybrid","dense","bm25"],"type":"string"}},"type":"object"}}

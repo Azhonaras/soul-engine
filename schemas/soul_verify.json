@@ -1,0 +1,1 @@
+{"name":"soul_verify","description":"Evidence Verifier: Evaluate memory entailment/contradiction with Epistemic Authority Hierarchy.","parameters":{"properties":{"episode_id":{"description":"Episode ID to verify","type":"string"}},"required":["episode_id"],"type":"object"}}

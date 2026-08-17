@@ -1,0 +1,1 @@
+{"name":"soul_dream","description":"Dream Sandbox: Run a sandboxed scenario simulation tagged strictly with 'no_external_action'.","parameters":{"properties":{"scenario_prompt":{"description":"Hypothetical scenario to simulate","type":"string"}},"required":["scenario_prompt"],"type":"object"}}

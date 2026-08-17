@@ -1,0 +1,1 @@
+{"name":"soul_rollback","description":"Rollback Soul identity state to a verified prior version without deleting audit trail history.","parameters":{"properties":{"reason":{"type":"string"},"target_version":{"type":"integer"}},"required":["target_version"],"type":"object"}}

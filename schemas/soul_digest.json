@@ -1,0 +1,1 @@
+{"name":"soul_digest","description":"Fetch a single compact summary block of core active facts and trait values.","parameters":{"properties":{"limit":{"default":5,"type":"integer"}},"type":"object"}}

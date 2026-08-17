@@ -1,0 +1,1 @@
+{"name":"soul_daemon_status","description":"Inspect status, execution counters, and intervals of the background SoulDaemon supervisor.","parameters":{"properties":{},"type":"object"}}

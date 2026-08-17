@@ -1,0 +1,1 @@
+{"name":"soul_heal","description":"Self-Healing Engine: Execute 3-tier repair escalation (Level 1: Recalibrate, Level 2: Soft Rollback, Level 3: Quarantine Freeze).","parameters":{"properties":{"level":{"enum":[1,2,3],"type":"integer"},"reason":{"type":"string"}},"required":["level"],"type":"object"}}
