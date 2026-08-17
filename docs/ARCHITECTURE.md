@@ -249,7 +249,7 @@ sequenceDiagram
     end
     D->>V: Submit imagined hypotheses and proposals
     V->>V: Check provenance, contradictions, value effects
-    V-->>O: Ranked proposals; all marked imagined
+    V-->>O: Ranked proposals (all marked imagined)
     O->>A: Record dream receipt and result hashes
     O->>O: Route proposals through normal change gate
 ```
