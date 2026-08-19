@@ -1,11 +1,11 @@
-# AI Agent Memory & Cognition MCP Stack: User & Developer Guideline
+# AI agent memory and cognition MCP stack: integration guide
 > **Soul MCP • Synapse Memory OS • Semantica Decision Intelligence**
 
 ---
 
-## 1. Executive Overview
+## 1. System overview
 
-This guideline provides a complete operational manual for using the **Cognitive MCP Tool Stack** (`Soul`, `Synapse`, and `Semantica`). Designed for AI agents, developers, and autonomous harnesses, this stack addresses the fundamental bottlenecks of Large Language Models: **context loss, memory degradation, session fragmentation, and unanchored decision-making**.
+This guide documents the operational setup for the cognitive MCP tool stack (`Soul`, `Synapse`, and `Semantica`). The stack gives agents structured long-term memory, identity governance, and decision provenance tracking.
 
 ```
                          ┌─────────────────────────────────────────┐
@@ -30,60 +30,60 @@ This guideline provides a complete operational manual for using the **Cognitive 
 
 ---
 
-## 2. Component Architecture & Tool Reference
+## 2. Component architecture and tool reference
 
 ### 2.1 Soul MCP (`soul_*`)
-*Purpose: Manages the agent's internal cognitive state, operational constitution, personality traits, and long-term reflection.*
+Manages internal cognitive state, operational constitution, personality traits, and long-term reflection.
 
 * **`soul_get_identity`**: Retrieves current operational state, state hash, narrative, and bounded trait values (`audacity`, `curiosity`, `epistemic_humility`, `sycophancy`, `shadow_tolerance`, `relational_care`).
 * **`soul_recall`**: Searches active long-term reflections and state memories in `soul.db` by keyword.
 * **`soul_remember`**: Writes a structured core reflection or identity insight.
 * **`soul_reflect`**: Synthesizes recent interaction logs to update identity traits safely.
-* **`soul_update_trait`**: Adjusts a specific trait value within bounded constitutional velocity limits.
+* **`soul_update_trait`**: Adjusts a specific trait value within bounded constitutional limits.
 * **`soul_digest`**: Generates a high-level summary digest of active identity states.
 * **`soul_verify`**: Validates the cryptographic state hash and constitutional integrity.
-* **`soul_heal`**: Automatically repairs corrupted state transitions or orphan trait logs.
-* **`soul_rollback`**: Reverts the soul state to a prior clean checkpoint hash if state drift occurs.
+* **`soul_heal`**: Repairs corrupted state transitions or orphan trait logs.
+* **`soul_rollback`**: Reverts the soul state to a prior checkpoint hash if state drift occurs.
 
 ---
 
 ### 2.2 Synapse Memory OS (`memory_*`)
-*Purpose: A local-first personal memory operating system stored in SQLite (`~/.synapse/synapse.db`).*
+Local-first memory operating system stored in SQLite (`~/.synapse/synapse.db`).
 
 * **`memory_write`**: Stores typed user facts, preferences, or procedural rules.
-  * **Memory Types**:
+  * **Memory types**:
     * `semantic`: Facts, domain knowledge, user preferences (e.g., *"User prefers dark mode and Python"*).
     * `episodic`: Specific events or past interaction summaries.
     * `procedural`: Standard operating procedures, rules, and workflows.
-  * **Entity Anchoring (`entityKey`)**: Attaching an `entityKey` (e.g., `user.primary_language`) automatically supersedes stale prior values while preserving audit history.
+  * **Entity anchoring (`entityKey`)**: Attaching an `entityKey` (such as `user.primary_language`) automatically supersedes stale prior values while preserving audit history.
 * **`memory_retrieve`**: Hybrid recall combining vector embeddings, BM25 full-text keyword search, importance, and recency decay.
 * **`memory_digest`**: Delivers a pinned, core memory digest at the beginning of a session.
-* **`memory_feedback`**: Marks memories as `helpful`, `stale`, or `wrong` to fine-tune retrieval weights.
+* **`memory_feedback`**: Marks memories as `helpful`, `stale`, or `wrong` to adjust retrieval weights.
 
 ---
 
-### 2.3 Semantica Framework (`semantica_*`)
-*Purpose: Graph-native context engineering, decision intelligence, and causal provenance tracking.*
+### 2.3 Semantica framework (`semantica_*`)
+Graph-native context engineering, decision intelligence, and causal provenance tracking.
 
 * **`record_decision`**: Logs architectural or design decisions with rationale and context.
 * **`query_decisions`**: Searches historical decision records by topic or tag.
-* **`get_causal_chain`**: Traces the root-cause trajectory leading to a specific code or system state.
-* **`extract_entities` & `extract_relations`**: Maps codebases or domain concepts into an interactive knowledge graph.
+* **`get_causal_chain`**: Traces the causal sequence leading to a specific code or system state.
+* **`extract_entities` & `extract_relations`**: Maps codebases or domain concepts into a knowledge graph.
 
 ---
 
-## 3. Installation & Configuration
+## 3. Installation and configuration
 
 ### 3.1 Prerequisites
-* **Node.js** (v18+ with `npx` / `pnpm`)
-* **Python** (v3.10+ with `pip` / `uv`)
-* **SQLite3**
+* Node.js (v18+ with `npx` / `pnpm`)
+* Python (v3.10+ with `pip` / `uv`)
+* SQLite3
 
 ---
 
-### 3.2 MCP Settings Integration (`mcp_settings.json`)
+### 3.2 MCP settings configuration (`mcp_settings.json`)
 
-Add the tool definitions to your client configuration (e.g., Antigravity, Claude Desktop, Cursor, Hermes):
+Add the tool definitions to your client configuration:
 
 ```json
 {
@@ -109,7 +109,7 @@ Add the tool definitions to your client configuration (e.g., Antigravity, Claude
 
 ---
 
-## 4. Operational Workflow Standard Operating Procedures (SOP)
+## 4. Operational workflow
 
 ```mermaid
 sequenceDiagram
@@ -139,43 +139,43 @@ sequenceDiagram
 
 ---
 
-### Step 1: Session Bootstrapping (Every Session Start)
-At the start of every session or task execution, the agent **must** perform a two-step context alignment:
-1. **Check Identity State**: Call `soul_get_identity` to establish baseline traits (e.g. sycophancy = 0, epistemic humility = 85) and check for unhandled tensions.
-2. **Fetch Core Memory Digest**: Call `memory_digest` to load pinned user preferences, active project paths, and core constraints.
+### Step 1: Session bootstrapping
+At the start of a session, perform two initial calls:
+1. **Check identity state**: Call `soul_get_identity` to establish baseline traits and inspect unhandled tensions.
+2. **Fetch core memory digest**: Call `memory_digest` to load pinned user preferences and project constraints.
 
 ---
 
-### Step 2: In-Task Memory & Decision Logging
-* **When discovering new user preferences or environment facts**: Call `memory_write` with an explicit `entityKey` to ensure future updates supersede outdated facts.
-* **When making architectural choices or bug fixes**: Call `record_decision` via Semantica to log *why* a design choice was made, preventing future regression loops.
+### Step 2: In-task memory and decision logging
+* When discovering new preferences or environment facts, call `memory_write` with an explicit `entityKey` so updates supersede older facts.
+* When choosing an architectural direction or bug fix, call `record_decision` via Semantica to record the technical rationale.
 
 ---
 
-### Step 3: Session Reflection & dreaming (Session End / Idle)
-* Call `soul_reflect` to summarize interaction logs and evaluate whether trait shifts occurred.
-* If memory or identity drift is detected, execute `soul_verify` or `soul_heal`.
+### Step 3: Session reflection and consolidation
+* Call `soul_reflect` to summarize interaction logs and evaluate trait adjustments.
+* If memory or identity drift is detected, run `soul_verify` or `soul_heal`.
 
 ---
 
-## 5. Security & Best Practices
+## 5. Operational guidelines and security
 
-1. 🛡️ **Credential Screening**:
-   * **Rule**: NEVER store API keys, JWT tokens, AWS credentials, or passwords in `memory_write` or `soul_remember`. Synapse automatically screens for secrets, but agents must exercise proactive filtering.
-2. 🔒 **Entity Key Discipline**:
-   * Use structured namespacing for entity keys:
-     * `user.language_preference`
-     * `project.architecture.frontend`
-     * `system.os_environment`
-3. ⚡ **Preventing Double Process Conflicts**:
-   * Synapse and Soul rely on SQLite lock managers. Do not run two independent CLI/MCP processes attached to the same `.db` file simultaneously without WAL (Write-Ahead Logging) enabled.
+1. **Credential screening**:
+   Do not store API keys, tokens, or passwords in memory. Synapse and Soul automatically screen for common secret patterns, but callers should avoid passing sensitive credentials.
+2. **Entity key namespacing**:
+   Use structured hierarchies for entity keys:
+   * `user.language_preference`
+   * `project.architecture.frontend`
+   * `system.os_environment`
+3. **Database concurrency**:
+   Synapse and Soul run on SQLite with WAL (Write-Ahead Logging) enabled for safe concurrent reads and writes. Avoid bypassing the MCP server to edit `.db` files directly during execution.
 
 ---
 
-## 6. Troubleshooting & Emergency Protocols
+## 6. Troubleshooting
 
-| Issue / Error | Root Cause | Resolution Strategy |
+| Issue | Root Cause | Resolution |
 | :--- | :--- | :--- |
-| `MCP connection closed / socket error` | Process conflict or crashed subprocess. | Restart the host application or run `npx pnpm --dir <path> mcp` directly in CLI to inspect logs. |
-| `State Hash Mismatch` in Soul | Unsanctioned manual editing of `soul.db`. | Call `soul_verify` to pinpoint corruption, then `soul_heal` or `soul_rollback` to restore hash integrity. |
+| `MCP connection closed / socket error` | Process conflict or crashed subprocess. | Restart the host application or test the command directly in the terminal to inspect logs. |
+| `State Hash Mismatch` in Soul | Manual direct edits to `soul.db`. | Call `soul_verify` to pinpoint corruption, then `soul_heal` or `soul_rollback` to restore hash integrity. |
 | `Outdated facts retrieved` | Missing `entityKey` on `memory_write`. | Overwrite using `memory_write` with the explicit `entityKey` set, then mark the old memory as `stale` using `memory_feedback`. |

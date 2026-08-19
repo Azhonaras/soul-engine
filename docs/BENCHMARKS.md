@@ -1,10 +1,10 @@
-# Empirical Cross-Version Industrial Benchmark Report (ISO/IEC/IEEE 29119)
+# Industrial benchmark report (ISO/IEC/IEEE 29119)
 
-This benchmark evaluates all four architectural generations of the **Soul Epistemic Identity Core** against enterprise industrial stress standards.
+This benchmark evaluates all four architectural generations of the Soul epistemic identity core against enterprise industrial stress standards.
 
 ---
 
-## 1. Executive Benchmark Summary Table
+## 1. Benchmark summary
 
 | Metric / Benchmark Vector | Test Standard / Constraint | v0.1 (Blueprint) | v0.2 (Constitution) | v0.3 (MCP Prototype) | v1.0 (Production Core) | Target SLA |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -23,7 +23,7 @@ This benchmark evaluates all four architectural generations of the **Soul Episte
 
 ---
 
-## 2. Ingestion & Verification Latency Scaling ($O(1)$ vs $O(N)$)
+## 2. Ingestion and verification latency scaling ($O(1)$ vs $O(N)$)
 
 ```
  Latency (ms)
