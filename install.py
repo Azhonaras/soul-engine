@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Soul MCP Universal Auto-Installer & Self-Registration Script v0.4.0
+Soul MCP Universal Auto-Installer & Self-Registration Script v1.0.0
 Allows any AI agent or operator to automatically install and register Soul in their runtime environment.
 """
 
@@ -23,7 +23,7 @@ BANNER = r"""
    _\ \/ _ \/ // /  / /__ / /|_/ / /__/ ___/\ \/ -_) __/ |/ / -_) __/ 
   /___/\___/\_,_/  /____//_/  /_/\___/_/  /___/\__/_/  |___/\__/_/   
                                                                       
-   Bio-Homeostatic Epistemic Identity Engine & MCP Server (v0.4.0)    
+    Bio-Homeostatic Epistemic Identity Engine & MCP Server (v1.0.0)    
 ======================================================================
 """
 

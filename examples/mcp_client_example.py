@@ -54,8 +54,8 @@ def main():
         ident_resp = call_mcp_tool(proc, "tools/call", {"name": "soul_get_identity", "arguments": {}}, req_id=3)
         res_text = ident_resp.get("result", {}).get("content", [{}])[0].get("text", "{}")
         parsed = json.loads(res_text)
-        print("Active Soul Version:", parsed.get("result", {}).get("soul_version"))
-        print("Constitutional Traits:", parsed.get("result", {}).get("traits"))
+        print("Active Soul Version:", parsed.get("soul_version"))
+        print("Constitutional Traits:", json.dumps(parsed.get("traits", {}), indent=2))
 
         # 4. Call soul_reward
         print("\n4. Calling 'soul_reward' (+1.0 Valence)...")

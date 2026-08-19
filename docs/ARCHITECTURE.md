@@ -1,7 +1,6 @@
 # Soul System Technical Blueprint v0.1
 
-**Normative source:** [`soul-constitution-v0.2.md`](./soul-constitution-v0.2.md)  
-**Status:** architecture-ready, implementation not started  
+**Normative source:** [CONSTITUTION.md](./CONSTITUTION.md)  
 **Principle:** identity changes are evidence-backed, bounded, reversible, and auditable.
 
 ## 1. System goal
@@ -19,8 +18,6 @@ Build one agent with a persistent operational identity and narrative self that c
 This system studies machine consciousness as a hypothesis. It does not treat fluent self-description as proof of consciousness.
 
 ## 2. Architecture
-
-Interactive version: [`soul-system-architecture.html`](./soul-system-architecture.html)
 
 ```mermaid
 flowchart LR
@@ -75,8 +72,6 @@ Start as one process plus one relational database. Do not split into microservic
 - Audit records are append-only; corrections become new events.
 
 ## 3. Main experience-to-soul workflow
-
-Interactive version: [`soul-update-workflow.html`](./soul-update-workflow.html)
 
 ```mermaid
 flowchart TD
@@ -802,14 +797,12 @@ soul-system/
 
 Four files are enough for first executable slice. Split later only when pressure appears.
 
-## 19. Artifact index
+## 19. Document index
 
-- [`soul-constitution-v0.2.md`](./soul-constitution-v0.2.md) — normative policy
-- [`soul-system-architecture.html`](./soul-system-architecture.html) — interactive architecture
-- [`soul-system-architecture.json`](./soul-system-architecture.json) — editable architecture spec
-- [`soul-update-workflow.html`](./soul-update-workflow.html) — interactive workflow
-- [`soul-update-workflow.json`](./soul-update-workflow.json) — editable workflow spec
-- [`soul-system-blueprint-v0.1.md`](./soul-system-blueprint-v0.1.md) — implementation blueprint
+- [CONSTITUTION.md](./CONSTITUTION.md): Normative operational constitution and trait bounds
+- [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report
+- [SOTA_COMPARISON.md](./SOTA_COMPARISON.md): Industry landscape comparison
+- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide
 
 ## 20. Decisions still needed before production
 

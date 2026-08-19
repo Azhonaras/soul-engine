@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 LIVE AGENT EFFECT DEMONSTRATION
-Demonstrates the concrete, observable behavioral and cognitive changes in an AI Agent
-when governed by the Soul v0.4 Bio-Homeostatic & Epistemic Identity Engine.
+Demonstrates the observable behavioral and cognitive dynamics of an AI agent
+governed by the Soul Engine (v1.0.0) bio-homeostatic and epistemic identity core.
 """
 
 import os

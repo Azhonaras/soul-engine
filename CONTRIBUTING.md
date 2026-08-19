@@ -1,10 +1,10 @@
 # Contributing to Soul Engine
 
-Thank you for your interest in contributing to **Soul Engine**! We welcome contributions from developers, researchers, and AI engineers.
+Thank you for your interest in contributing to Soul Engine. We welcome contributions from developers, researchers, and engineers.
 
 ---
 
-## 🛠️ Development Setup
+## Development setup
 
 1. **Clone the repository:**
    ```bash
@@ -26,7 +26,7 @@ Thank you for your interest in contributing to **Soul Engine**! We welcome contr
 
 ---
 
-## 🧪 Running Tests & Verification
+## Running tests and verification
 
 Before submitting a pull request, ensure all test suites pass:
 
@@ -46,23 +46,23 @@ python tests/test_benchmark.py
 
 ---
 
-## 📜 Architectural Invariants to Preserve
+## Architectural invariants to preserve
 
-When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you **must** preserve these core invariants:
+When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you must preserve these core invariants:
 
 1. **Epistemic Authority Hierarchy**:
    $$\text{verified} (5) > \text{observed} (4) > \text{inferred} (3) > \text{reported} (2) > \text{imagined} (1)$$
-   A lower-authority provenance must **never** silently overwrite higher-authority ground truth.
-2. **ACID Transaction Isolation**:
+   A lower-authority provenance must never silently overwrite higher-authority ground truth.
+2. **ACID transaction isolation**:
    All database writes must execute under `BEGIN IMMEDIATE;` to guarantee zero version race condition collisions.
-3. **Neuromodulatory Clamping**:
+3. **Neuromodulatory clamping**:
    All traits must strictly adhere to their constitutional bounds $[min, max]$ defined in the Genesis Constitution.
-4. **Secret Scrubbing**:
+4. **Secret scrubbing**:
    Never persist high-entropy API keys (AWS, Stripe, JWT, DB passwords) to disk without masking.
 
 ---
 
-## 📬 Pull Request Guidelines
+## Pull request guidelines
 
 1. Create a feature branch: `git checkout -b feature/your-feature-name`.
 2. Commit your changes with clear, descriptive commit messages.
@@ -71,7 +71,7 @@ When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you **must**
 
 ---
 
-## 👥 Core Contributors
+## Contributors & attribution
 
 * **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
 * **Antigravity (UPI)** — Co-designer, Implementation & Verification Assistant (Google DeepMind)
