@@ -161,6 +161,15 @@ python examples/demo_live_agent.py
 
 ---
 
+## Ecosystem and related projects
+
+Soul Engine is designed to operate standalone or alongside complementary agent cognition tools:
+
+* **[Synapse](https://github.com/Danialsamadi/synapse)**: A local-first personal memory operating system for user preferences, working notes, and typed episodic recall.
+* **[Semantica](https://github.com/semantica-agi/semantica)**: Graph-native decision intelligence, architectural decision records, and causal provenance tracking for AI agents.
+
+---
+
 ## Contributors & attribution
 
 * **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
