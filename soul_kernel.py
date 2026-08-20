@@ -27,20 +27,28 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple, Literal, Set
 from dataclasses import dataclass, field, asdict
 
-# Optional Semantica Integration
+import warnings
+warnings.filterwarnings("ignore")
+
+# Optional Semantica Integration (silently isolate stdout for MCP stdio safety)
 try:
-    import semantica
-    from semantica.context import ContextGraph
-    from semantica.provenance import ProvenanceManager
-    HAS_SEMANTICA = True
-except ImportError:
+    _old_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        import semantica
+        from semantica.context import ContextGraph
+        from semantica.provenance import ProvenanceManager
+        HAS_SEMANTICA = True
+    finally:
+        sys.stdout = _old_stdout
+except (ImportError, Exception):
     HAS_SEMANTICA = False
 
 # Optional PyTorch / Transformers / SentenceTransformers for ML
 try:
     from sentence_transformers import SentenceTransformer
     HAS_SENTENCE_TRANSFORMERS = True
-except ImportError:
+except (ImportError, Exception):
     HAS_SENTENCE_TRANSFORMERS = False
 
 CONSTITUTION_VERSION = "0.2"

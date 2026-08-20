@@ -30,7 +30,7 @@ def get_kernel() -> SoulKernel:
     if _kernel is None:
         db_path = os.environ.get("SOUL_DB_PATH", os.path.join(os.path.expanduser("~"), ".soul", "soul.db"))
         _kernel = SoulKernel(db_path=db_path)
-        log.info("Initialized Soul Kernel v0.4.0 at %s", db_path)
+        log.info("Initialized Soul Kernel v1.0.0 at %s", db_path)
 
         if os.environ.get("SOUL_DAEMON_ENABLED", "true").lower() in ("true", "1", "yes"):
             _kernel.start_daemon(dream_interval=300, heal_interval=600, homeostasis_interval=60)
@@ -432,7 +432,7 @@ def _handle_jsonrpc(req: dict) -> Optional[dict]:
 
 
 def main():
-    log.info("Starting Soul MCP Server v0.4.0 on stdio...")
+    log.info("Starting Soul MCP Server v1.0.0 on stdio...")
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
 
