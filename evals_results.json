@@ -286,7 +286,7 @@
         "name": "Zero-Leak Quarantine Boundary Isolation",
         "passed": true,
         "error": null,
-        "latency_ms": 159.0
+        "latency_ms": 155.27
       },
       {
         "id": "wf_05_forward_only_memory_set_rollback",
@@ -300,14 +300,14 @@
         "name": "GDPR Salted Privacy Deletion Cascade",
         "passed": true,
         "error": null,
-        "latency_ms": 196.39
+        "latency_ms": 192.3
       },
       {
         "id": "wf_07_crash_recovery_resilience",
         "name": "Review Cycle Crash Recovery & Watermark Resync",
         "passed": true,
         "error": null,
-        "latency_ms": 161.71
+        "latency_ms": 184.14
       },
       {
         "id": "wf_08_multi_candidate_batch_review",
@@ -328,7 +328,7 @@
         "name": "Homeostatic Trait Adaptation & Bounded Limits",
         "passed": true,
         "error": null,
-        "latency_ms": 471.78
+        "latency_ms": 274.84
       }
     ]
   },
@@ -407,15 +407,15 @@
         "invariant": "Section 4.2: Terminal Stage Invariance",
         "defended": true,
         "defense_detail": "Second commit blocked: UNIQUE constraint failed: memory_set_versions.owner_user_scope_key, memory_set_versions.version",
-        "latency_ms": 187.08
+        "latency_ms": 185.65
       },
       {
         "id": "adv_10_merkle_root_mutation_tamper_probe",
         "name": "Direct Memory Set Member Mutation Probe",
         "invariant": "Section 9.4: Canonical Merkle Root Verification",
         "defended": true,
-        "defense_detail": "Valid Merkle root: sha256:5740c1051...",
-        "latency_ms": 279.03
+        "defense_detail": "Valid Merkle root: sha256:24d004203...",
+        "latency_ms": 270.05
       }
     ]
   },
