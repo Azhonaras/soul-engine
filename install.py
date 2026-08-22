@@ -181,11 +181,10 @@ def main():
 
     print("\n" + "=" * 70)
     print("                SOUL MCP SERVER INSTALLATION COMPLETE                ")
-    print("=" * 70)
     print(f" • Server Script   : {server_script}")
     print(f" • SQLite Database : {db_path}")
     print(f" • Python Executable: {python_exe}")
-    print(" • Registered Tools: 12 Active MCP Tools (soul_reward, soul_remember, etc.)")
+    print(" • Registered Tools: 20 Active MCP Tools (12 Core + 8 Review Cycle)")
     print("=" * 70 + "\n")
 
 

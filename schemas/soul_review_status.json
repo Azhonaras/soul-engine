@@ -1,0 +1,1 @@
+{"name":"soul_review_status","description":"Get current review cycle status, pending memory candidates, and preview hash.","parameters":{"properties":{"session_id":{"type":"string"}},"required":["session_id"],"type":"object"}}

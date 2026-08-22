@@ -6,8 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "soul-engine"
 version = "1.1.0"
 authors = [
-  { name="Azhonaras (NBada)", email="contact@soul-engine.dev" },
-  { name="Antigravity (UPI)", email="antigravity@google.com" },
+  { name="Azhonaras (Navid Badami)", email="nbada@users.noreply.github.com" },
 ]
 description = "Epistemic Bio-Homeostatic Identity & Memory Kernel for AI Agents with Model Context Protocol (MCP) Interface"
 readme = "README.md"

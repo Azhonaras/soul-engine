@@ -33,10 +33,11 @@ This guide documents the operational setup for the cognitive MCP tool stack (`So
 ## 2. Component architecture and tool reference
 
 ### 2.1 Soul MCP (`soul_*`)
-Manages internal cognitive state, operational constitution, personality traits, and long-term reflection.
+Manages internal cognitive state, operational constitution, personality traits, long-term reflection, and human-in-the-loop review cycles.
 
+#### Core Identity & Homeostasis Tools
 * **`soul_get_identity`**: Retrieves current operational state, state hash, narrative, and bounded trait values (`audacity`, `curiosity`, `epistemic_humility`, `sycophancy`, `shadow_tolerance`, `relational_care`).
-* **`soul_recall`**: Searches active long-term reflections and state memories in `soul.db` by keyword.
+* **`soul_recall`**: Searches active long-term reflections and state memories in `soul.db` by keyword or hybrid fusion.
 * **`soul_remember`**: Writes a structured core reflection or identity insight.
 * **`soul_reflect`**: Synthesizes recent interaction logs to update identity traits safely.
 * **`soul_update_trait`**: Adjusts a specific trait value within bounded constitutional limits.
@@ -44,6 +45,19 @@ Manages internal cognitive state, operational constitution, personality traits, 
 * **`soul_verify`**: Validates the cryptographic state hash and constitutional integrity.
 * **`soul_heal`**: Repairs corrupted state transitions or orphan trait logs.
 * **`soul_rollback`**: Reverts the soul state to a prior checkpoint hash if state drift occurs.
+* **`soul_dream`**: Runs offline counterfactual memory consolidation and dream simulations.
+* **`soul_reward`**: Adjusts bio-neuromodulatory neurotransmitters (Dopamine, Cortisol, Serotonin).
+* **`soul_daemon_status`**: Queries background daemon worker status and maintenance heartbeat.
+
+#### Human Review Cycle Governance Tools (v1.1.0)
+* **`soul_host_event`**: Ingests tamper-evident user/system host events into the SHA-256 hash chain.
+* **`soul_review_start`**: Opens an anchored review cycle with watermark state snapshots.
+* **`soul_review_status`**: Retrieves real-time lifecycle phase, candidate extractions, and candidate decisions.
+* **`soul_review_stage_decision`**: Stages human-authorized decisions (`remember`, `correct`, `reject`, `replace_old`, `session_only`).
+* **`soul_review_preview`**: Generates pre-commit diffs, state hash previews, and change summaries.
+* **`soul_review_commit`**: Cryptographically commits memory promotions and generates tamper-evident receipts.
+* **`soul_memory_rollback`**: Performs forward-only rollbacks to prior memory set versions ($V \to V+1$).
+* **`soul_memory_delete`**: Executes GDPR salted privacy erasure cascades and nullifies memory salts.
 
 ---
 

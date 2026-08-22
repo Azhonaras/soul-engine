@@ -73,6 +73,5 @@ When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you must pre
 
 ## Contributors & attribution
 
-* **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
-* **Antigravity (UPI)** — Co-designer, Implementation & Verification Assistant (Google DeepMind)
+* **Azhonaras (Navid Badami)** — Creator, Lead Architect & Maintainer
 * **Soul Open Source Community** — Contributions, Feedback & Testing
