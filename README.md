@@ -1,10 +1,11 @@
-# Soul Engine (v1.0.0)
+# Soul Engine (v1.1.0)
 ### *A Cognitive Identity and Epistemic Memory Kernel for Autonomous AI Agents*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](SECURITY.md)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Protocol: Model Context Protocol](https://img.shields.io/badge/Protocol-MCP%20Standard-green.svg)](https://modelcontextprotocol.io/)
-[![CI Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
+[![MCP-Evals: 100% Passed](https://img.shields.io/badge/MCP--Evals-100%25%20Verified-brightgreen.svg)](EVAL_REPORT.md)
 [![Tests: ISO/IEC 29119](https://img.shields.io/badge/Tests-100%25%20Verified-success.svg)](tests/)
 
 Soul Engine is a local cognitive kernel for AI agents. It addresses three common limitations in agent systems: session amnesia, vulnerability to adversarial memory poisoning (gaslighting), and behavioral drift.
@@ -57,7 +58,7 @@ The installer initializes your local database (`~/.soul/soul.db`) and registers 
 ## Architecture
 
 ```
-                         THE SOUL COGNITIVE LOOP
+                         THE SOUL COGNITIVE LOOP (v1.1.0)
  ┌─────────────────────────────────────────────────────────────────────────┐
  │ 1. INGESTION & DEFENSE                                                  │
  │    New Observation ──► Secret Scrubber ──► Epistemic Provenance Check  │
@@ -73,14 +74,39 @@ The installer initializes your local database (`~/.soul/soul.db`) and registers 
  ├─────────────────────────────────────────────────────────────────────────┤
  │ 4. CRYPTOGRAPHIC STATE LEDGER                                           │
  │    SHA-256 Merkle Chain ──► Point-in-Time State Rollback (< 2 ms)       │
+ ├─────────────────────────────────────────────────────────────────────────┤
+ │ 5. HUMAN REVIEW CYCLE GOVERNANCE (v1.1.0)                               │
+ │    Watermark Freezes ──► Pre-Commit Diffs ──► SHA-256 Commit Receipts   │
+ │    Forward-Only Rollback (V → V+1) ──► Salt-Nullified Privacy Erasure   │
  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+```mermaid
+flowchart TD
+    E["Host Interaction Event"] --> S["Secret Scrubber & Credential Filter"]
+    S --> P{"Epistemic Rank Authority Check"}
+    P -->|verified / observed| Q["Quarantine Memory Candidate"]
+
+    Q --> NLI["Contradiction & NLI Engine"]
+    NLI --> BIO["Neuromodulation Loop: Dopamine / Cortisol / Serotonin"]
+    BIO --> TRAIT["Bounded Trait Clamping: Constitutional Limits"]
+
+    TRAIT --> START["soul_review_start: Freeze Watermark"]
+    START --> STAGE["soul_review_stage_decision: 5 Deterministic Actions"]
+    STAGE --> PREV["soul_review_preview: Pre-Commit Unified Diff"]
+    PREV --> COMMIT["soul_review_commit: Human Origin Verified"]
+
+    COMMIT --> DB[("SQLite WAL Storage: reviewed_memories")]
+    COMMIT --> HASH["SHA-256 Merkle Commit Receipt"]
+    HASH --> RB["Forward-Only Rollback (V &rarr; V+1)"]
+    HASH --> GDPR["GDPR Salt-Nullified Memory Erasure"]
 ```
 
 ---
 
 ## Industry benchmark comparison
 
-| Dimension | **Soul Engine (v1.0.0)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Reflexion** |
+| Dimension | **Soul Engine (v1.1.0)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Reflexion** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Primary Approach** | **Epistemic Bio-Homeostasis** | Semantic Fact Store | OS Context Paging | Temporal Graph | Verbal RL Buffer |
 | **Epistemic Authority Ranking** | **Yes ($\text{verified} > \dots > \text{imagined}$)** | No | No | No | No |
@@ -88,7 +114,7 @@ The installer initializes your local database (`~/.soul/soul.db`) and registers 
 | **Bio-Neuromodulation Loop** | **Yes (Dopamine, Cortisol, Serotonin)** | No | No | No | No |
 | **Constitutional Trait Bounds** | **Yes (Mathematical Clamping)** | No | No | No | No |
 | **Cryptographic Hash Ledger** | **Yes (SHA-256 State Auditing)** | No | No | No | No |
-| **Ingestion Latency (p50 / p95)** | **3.38 ms / 3.85 ms** | ~50–150 ms (Cloud) | ~80–200 ms | ~40–120 ms | N/A |
+| **Ingestion Latency (p50 / p95)** | **3.38 ms / 3.85 ms** | ~50-150 ms (Cloud) | ~80-200 ms | ~40-120 ms | N/A |
 | **Concurrent ACID Reliability** | **113.6 ops/s (0% Collisions)** | Backend-dependent | Server-bound | Cloud-bound | Local single-thread |
 | **Credential & Secret Scrubbing** | **100% (High-Entropy Regex)** | No | No | No | No |
 | **Interface Standard** | **Native 12-Tool JSON-RPC MCP** | Custom SDK / REST | REST / CLI | REST / Cloud API | Python Script |
@@ -163,13 +189,13 @@ python examples/demo_live_agent.py
 
 ## Contributors & attribution
 
-* **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
-* **Antigravity (UPI)** — Co-designer, Implementation & Verification Assistant (Google DeepMind)
-* **Soul Open Source Community** — Contributions, Feedback & Testing
+* **Azhonaras (Navid Badami)**: Creator, Lead Architect & Maintainer
+* **Antigravity (UPI)**: Co-author & Verification Assistant (v1.1.0)
+* **Soul Open Source Community**: Contributions, Feedback & Testing
 
 ---
 
 ## License
 
 Soul Engine is released under the open-source [MIT License](LICENSE).  
-Copyright (c) 2026 Azhonaras (NBada), Antigravity (UPI), and Soul Contributors.
+Copyright (c) 2026 Azhonaras (Navid Badami), Antigravity (UPI), and Soul Contributors.

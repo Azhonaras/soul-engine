@@ -1,6 +1,6 @@
 """
-Soul System Model Context Protocol (MCP) Server v1.0.0
-Normative Source: soul-constitution-v0.2.md & soul-system-architecture.json
+Soul System Model Context Protocol (MCP) Server v1.1.0
+Normative Source: soul-constitution-v0.2.md & soul-review-cycle-technical-spec-v0.1.md
 """
 
 from __future__ import annotations
@@ -234,6 +234,133 @@ def _tool_soul_daemon_status(args: dict) -> dict:
         return {"error": str(exc)}
 
 
+def _tool_soul_host_event(args: dict) -> dict:
+    session_id = args.get("session_id")
+    if not session_id:
+        return {"error": "session_id parameter is required"}
+    try:
+        ev = get_kernel().record_host_event(
+            session_id=session_id,
+            user_scope_key=args.get("user_scope_key", "default_user"),
+            project_scope_key=args.get("project_scope_key"),
+            origin_kind=args.get("origin_kind", "human"),
+            event_kind=args.get("event_kind", "conversation"),
+            payload=args.get("payload", "")
+        )
+        return {"status": "success", "event_id": ev.id, "event_hash": ev.event_hash, "sequence": ev.sequence}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _tool_soul_review_start(args: dict) -> dict:
+    session_id = args.get("session_id")
+    if not session_id:
+        return {"error": "session_id parameter is required"}
+    try:
+        res = get_kernel().start_review_cycle(
+            session_id=session_id,
+            user_scope_key=args.get("user_scope_key", "default_user"),
+            project_scope_key=args.get("project_scope_key"),
+            trigger_kind=args.get("trigger_kind", "explicit")
+        )
+        return {"status": "success", "review_cycle": res}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _tool_soul_review_status(args: dict) -> dict:
+    session_id = args.get("session_id")
+    if not session_id:
+        return {"error": "session_id parameter is required"}
+    try:
+        status = get_kernel().get_review_status(session_id=session_id)
+        if not status:
+            return {"status": "no_cycle_found"}
+        return {"status": "success", "review_status": status}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _tool_soul_review_stage_decision(args: dict) -> dict:
+    cycle_id = args.get("cycle_id")
+    candidate_id = args.get("candidate_id")
+    decision = args.get("decision")
+    human_event_ref = args.get("human_event_ref")
+    if not cycle_id or not candidate_id or not decision or not human_event_ref:
+        return {"error": "cycle_id, candidate_id, decision, and human_event_ref are required"}
+    try:
+        res = get_kernel().record_review_decision(
+            cycle_id=cycle_id,
+            candidate_id=candidate_id,
+            decision=decision,
+            human_event_ref=human_event_ref,
+            user_scope_key=args.get("user_scope_key", "default_user"),
+            corrected_text=args.get("corrected_text"),
+            correction_confirmation_event_ref=args.get("correction_confirmation_event_ref")
+        )
+        return {"status": "success", "decision_record": res}
+    except Exception as exc:
+        return {"status": "rejected", "error": str(exc)}
+
+
+def _tool_soul_review_preview(args: dict) -> dict:
+    cycle_id = args.get("cycle_id")
+    if not cycle_id:
+        return {"error": "cycle_id parameter is required"}
+    try:
+        preview = get_kernel().preview_review_cycle(cycle_id=cycle_id)
+        return {"status": "success", "preview": preview}
+    except Exception as exc:
+        return {"status": "rejected", "error": str(exc)}
+
+
+def _tool_soul_review_commit(args: dict) -> dict:
+    cycle_id = args.get("cycle_id")
+    commit_human_event_ref = args.get("commit_human_event_ref")
+    if not cycle_id or not commit_human_event_ref:
+        return {"error": "cycle_id and commit_human_event_ref are required"}
+    try:
+        receipt = get_kernel().commit_review_cycle(
+            cycle_id=cycle_id,
+            commit_human_event_ref=commit_human_event_ref
+        )
+        return {"status": "success", "receipt": receipt}
+    except Exception as exc:
+        return {"status": "rejected", "error": str(exc)}
+
+
+def _tool_soul_memory_rollback(args: dict) -> dict:
+    target_version = args.get("target_version")
+    human_event_ref = args.get("human_event_ref")
+    if target_version is None or not human_event_ref:
+        return {"error": "target_version and human_event_ref are required"}
+    try:
+        res = get_kernel().rollback_reviewed_memory_set(
+            target_version=int(target_version),
+            human_event_ref=human_event_ref,
+            user_scope_key=args.get("user_scope_key", "default_user")
+        )
+        return {"status": "success", "rollback_result": res}
+    except Exception as exc:
+        return {"status": "rejected", "error": str(exc)}
+
+
+def _tool_soul_memory_delete(args: dict) -> dict:
+    memory_id = args.get("memory_id")
+    human_event_ref = args.get("human_event_ref")
+    if not memory_id or not human_event_ref:
+        return {"error": "memory_id and human_event_ref are required"}
+    try:
+        res = get_kernel().delete_reviewed_memory(
+            memory_id=memory_id,
+            human_event_ref=human_event_ref,
+            user_scope_key=args.get("user_scope_key", "default_user")
+        )
+        return {"status": "success", "deletion_result": res}
+    except Exception as exc:
+        return {"status": "rejected", "error": str(exc)}
+
+
 # ==============================================================================
 # TOOL REGISTRY
 # ==============================================================================
@@ -376,6 +503,121 @@ TOOLS = [
         "description": "Inspect status, execution counters, and intervals of the background SoulDaemon supervisor.",
         "inputSchema": {"type": "object", "properties": {}},
         "_handler": _tool_soul_daemon_status
+    },
+    {
+        "name": "soul_host_event",
+        "description": "Append an authentic host event (conversation, tool result, lifecycle) to the tamper-evident log.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id":        {"type": "string", "description": "Host session ID"},
+                "user_scope_key":    {"type": "string", "default": "default_user"},
+                "project_scope_key": {"type": "string"},
+                "origin_kind":       {"type": "string", "enum": ["human", "agent", "tool", "environment", "system"], "default": "human"},
+                "event_kind":        {"type": "string", "enum": ["conversation", "tool_result", "session_lifecycle", "review_decision", "review_commit", "memory_rollback", "memory_deletion"], "default": "conversation"},
+                "payload":           {"type": ["string", "object"]}
+            },
+            "required": ["session_id"]
+        },
+        "_handler": _tool_soul_host_event
+    },
+    {
+        "name": "soul_review_start",
+        "description": "Open a Soul Review Cycle anchored at the latest host watermark, extracting memory candidates.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id":        {"type": "string"},
+                "user_scope_key":    {"type": "string", "default": "default_user"},
+                "project_scope_key": {"type": "string"},
+                "trigger_kind":      {"type": "string", "enum": ["explicit", "new_session", "archive", "shutdown", "replacement", "idle"], "default": "explicit"}
+            },
+            "required": ["session_id"]
+        },
+        "_handler": _tool_soul_review_start
+    },
+    {
+        "name": "soul_review_status",
+        "description": "Get current review cycle status, pending memory candidates, and preview hash.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string"}
+            },
+            "required": ["session_id"]
+        },
+        "_handler": _tool_soul_review_status
+    },
+    {
+        "name": "soul_review_stage_decision",
+        "description": "Stage a human review decision (remember, correct, session_only, reject, defer, replace_old).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cycle_id":                           {"type": "string"},
+                "candidate_id":                       {"type": "string"},
+                "decision":                           {"type": "string", "enum": ["remember", "correct", "session_only", "reject", "defer", "replace_old", "keep_both_with_context", "keep_old", "reject_both"]},
+                "human_event_ref":                    {"type": "string", "description": "Host event ID establishing human origin"},
+                "user_scope_key":                     {"type": "string", "default": "default_user"},
+                "corrected_text":                     {"type": "string"},
+                "correction_confirmation_event_ref":  {"type": "string"}
+            },
+            "required": ["cycle_id", "candidate_id", "decision", "human_event_ref"]
+        },
+        "_handler": _tool_soul_review_stage_decision
+    },
+    {
+        "name": "soul_review_preview",
+        "description": "Run 12-point deterministic validation and generate atomic review preview diff with SHA-256 hash.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cycle_id": {"type": "string"}
+            },
+            "required": ["cycle_id"]
+        },
+        "_handler": _tool_soul_review_preview
+    },
+    {
+        "name": "soul_review_commit",
+        "description": "Enforce pre-commit checks 13-17 and atomically promote memories into active set with cryptographic receipt.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cycle_id":               {"type": "string"},
+                "commit_human_event_ref": {"type": "string", "description": "Human host event ID approving the preview hash"}
+            },
+            "required": ["cycle_id", "commit_human_event_ref"]
+        },
+        "_handler": _tool_soul_review_commit
+    },
+    {
+        "name": "soul_memory_rollback",
+        "description": "Execute forward-only rollback of active reviewed memory set to target version with audit receipt.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_version":  {"type": "integer"},
+                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing the rollback"},
+                "user_scope_key":  {"type": "string", "default": "default_user"}
+            },
+            "required": ["target_version", "human_event_ref"]
+        },
+        "_handler": _tool_soul_memory_rollback
+    },
+    {
+        "name": "soul_memory_delete",
+        "description": "Execute GDPR-compliant Salted Privacy Deletion Cascade on a memory and its source episodes.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "memory_id":       {"type": "string"},
+                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing the deletion"},
+                "user_scope_key":  {"type": "string", "default": "default_user"}
+            },
+            "required": ["memory_id", "human_event_ref"]
+        },
+        "_handler": _tool_soul_memory_delete
     }
 ]
 
@@ -384,7 +626,7 @@ TOOLS = [
 # JSON-RPC / MCP STDIO SERVER HANDLER
 # ==============================================================================
 
-SERVER_INFO = {"name": "soul-mcp-server", "version": "1.0.0"}
+SERVER_INFO = {"name": "soul-mcp-server", "version": "1.1.0"}
 CAPABILITIES = {"tools": {"listChanged": False}}
 
 

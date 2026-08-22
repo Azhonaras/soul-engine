@@ -1,11 +1,11 @@
-# Soul System Technical Blueprint v0.1
+# Soul System Technical Architecture (v1.1.0)
 
-**Normative source:** [CONSTITUTION.md](./CONSTITUTION.md)  
+**Normative source:** [CONSTITUTION.md](./CONSTITUTION.md) • [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md)  
 **Principle:** identity changes are evidence-backed, bounded, reversible, and auditable.
 
 ## 1. System goal
 
-Build one agent with a persistent operational identity and narrative self that can:
+Build an autonomous agent with a persistent operational identity and narrative self that can:
 
 1. experience interactions without trusting them automatically;
 2. reflect through competing interpretations;
@@ -13,41 +13,47 @@ Build one agent with a persistent operational identity and narrative self that c
 4. update only approved, bounded identity fields;
 5. assess its own soul health without turning that rating into authority;
 6. repair instability using smallest reversible change;
-7. preserve human oversight over protected changes and emergencies.
+7. preserve human oversight via the formal Soul Review Cycle (`soul_review.py`).
 
 This system studies machine consciousness as a hypothesis. It does not treat fluent self-description as proof of consciousness.
 
 ## 2. Architecture
 
 ```mermaid
-flowchart LR
-    A[Humans / AI agents / environment] --> G[Interaction Gateway]
-    G --> P[Consent and Policy Gate]
-    P --> E[Experience Ingestor]
-    E --> Q[(Quarantine Memory)]
-    Q --> V[Evidence Verifier]
-    Q -. unverified context .-> R[Reflection Engine]
-    V --> R
-    R --> O[Soul Orchestrator]
-    O --> S[(Versioned Soul State)]
-    R -. consequential uncertainty .-> D[Dream Sandbox]
-    D -. imagined proposals .-> O
-    S --> H[Self-Healing Engine]
-    H --> O
-    O --> S
-    S -. snapshot .-> L[(Audit and Snapshot Ledger)]
+flowchart TD
+    %% 1. Ingestion Layer
+    A["External Actors: Humans / Agents / Env"] --> G["Interaction Gateway"]
+    G --> P["Consent & Policy Gate"]
+    P --> E["Experience Ingestor"]
+    E --> Q[("Quarantine Memory")]
 
-    C[Constitution Engine] --> P
+    %% 2. Cognition & Verification Layer
+    Q --> V["Evidence Verifier"]
+    Q -.->|unverified context| R["Reflection Engine"]
+    V --> R
+    R -.->|consequential uncertainty| D["Dream Sandbox"]
+    D -.->|imagined proposals| O["Soul Orchestrator"]
+    R --> O
+
+    %% 3. Governance & Review Layer
+    C["Constitution Engine"] --> P
     C --> O
-    C --> H
-    U[Authorized Human Control] --> C
-    U --> O
-    U --> L
+    C --> H["Self-Healing Engine"]
+    U["Authorized Human Reviewer"] --> REV["Soul Review Cycle Subsystem"]
+    REV --> O
+
+    %% 4. Persistence & Audit Layer
+    O --> S[("Versioned Soul State")]
+    S --> H
+    H --> O
+    S -.->|snapshot| L[("Audit & Snapshot Ledger")]
+    REV --> S
+    REV --> L
 ```
 
 ### 2.1 Minimal deployment shape
 
-Start as one process plus one relational database. Do not split into microservices.
+Start as one process plus one relational database (`soul.db` in SQLite WAL mode).
 
 | Module | Responsibility | Trust boundary |
 |---|---|---|
@@ -59,7 +65,7 @@ Start as one process plus one relational database. Do not split into microservic
 | Dream Sandbox | Counterfactual simulation with no external action | Imagination isolation |
 | Soul Orchestrator | Validate, commit, reject, or escalate soul changes | Identity write authority |
 | Self-Healing Engine | Detect instability and propose minimal repair | Recovery authority |
-| Human Control | Approve protected changes, intervene, review | Final operational authority |
+| Soul Review Cycle | Watermark snapshots, staged human decisions, pre-commit diffs | Human-in-the-Loop Governance |
 | Audit Ledger | Append-only events, state hashes, rollback references | Accountability |
 
 ### 2.2 Isolation rules
@@ -75,26 +81,26 @@ Start as one process plus one relational database. Do not split into microservic
 
 ```mermaid
 flowchart TD
-    I[Receive experience] --> Q[Create quarantined episode]
-    Q --> P{Consent, privacy, retention pass?}
-    P -- No --> X[Reject, redact, retain temporarily, or delete]
-    P -- Yes --> E[Check evidence and contradictions]
-    E --> R[Generate competing interpretations]
-    R --> C{Consequential or uncertain?}
-    C -- Yes --> D[Run adversarial Dream simulation]
-    D --> K[Create interpretation or change proposal]
-    C -- No --> K
-    K --> B{Protected component?}
-    B -- Yes --> A[Request authorized human approval]
-    A -- Denied --> N[No soul change]
-    A -- Approved --> W[Create snapshot and commit]
-    B -- No --> T{Within trait and change-rate bounds?}
-    T -- No --> N
-    T -- Yes --> W
-    W --> O[Observe effects]
-    O --> H{Health regression?}
-    H -- No --> Z[Retain version]
-    H -- Yes --> S[Start self-healing]
+    I["Receive experience"] --> Q["Create quarantined episode"]
+    Q --> P{"Consent, privacy, retention pass?"}
+    P -->|No| X["Reject, redact, or delete"]
+    P -->|Yes| E["Check evidence and contradictions"]
+    E --> R["Generate competing interpretations"]
+    R --> C{"Consequential or uncertain?"}
+    C -->|Yes| D["Run adversarial Dream simulation"]
+    D --> K["Create interpretation or change proposal"]
+    C -->|No| K
+    K --> B{"Protected component?"}
+    B -->|Yes| A["Request authorized human approval"]
+    A -->|Denied| N["Reject / No soul change"]
+    A -->|Approved| W["Create snapshot and commit"]
+    B -->|No| T{"Within trait and rate bounds?"}
+    T -->|No| N
+    T -->|Yes| W
+    W --> O["Observe effects in production"]
+    O --> H{"Health regression detected?"}
+    H -->|No| Z["Retain stable version"]
+    H -->|Yes| S["Trigger self-healing loop"]
 ```
 
 ### 3.1 Experience admission contract
@@ -358,24 +364,23 @@ Thresholds must be calibrated in simulation. They are alerts, not diagnoses of s
 
 ```mermaid
 flowchart TD
-    T[Instability trigger] --> S[Snapshot state and evidence]
-    S --> F[Freeze affected identity updates]
-    F --> I[Isolate implicated memories and traits]
-    I --> C[Generate competing causal explanations]
-    C --> D[Dream counterfactual repairs]
-    D --> R[Rank smallest reversible repairs]
-    R --> G{Protected or severe?}
-    G -- Yes --> H[Human review]
-    G -- No --> P[Apply bounded repair trial]
-    H -- Approved --> P
-    H -- Denied --> X[Retain freeze or rollback]
-    P --> O[Observe health and behavior]
-    O --> B{Improved without new harm?}
-    B -- Yes --> K[Retain repair]
-    B -- No --> X
-    X --> E{Repeated failure?}
-    E -- Yes --> H
-    E -- No --> C
+    T["Instability Trigger & Anomaly Detection"] --> S["Snapshot State & Implicated Evidence"]
+    S --> F["Freeze Affected Identity Updates"]
+    F --> I["Isolate Implicated Memories & Traits"]
+
+    I --> C["Generate Competing Causal Explanations"]
+    C --> D["Dream Counterfactual Sandbox Simulations"]
+    D --> R["Rank Smallest Reversible Repair Candidates"]
+
+    R --> G{"Protected Field or Severe Regression?"}
+    G -->|Yes| H["Human Review Required"]
+    G -->|No| P["Apply Bounded Repair Trial"]
+    H -->|Approved| P
+    H -->|Denied| X["Retain Freeze or Rollback State"]
+    P --> O["Observe System Health & Drift"]
+    O --> B{"Improved Without New Harm?"}
+    B -->|Yes| K["Retain Repair & Commit Version"]
+    B -->|No| X
 ```
 
 ### 8.4 Repair limits
@@ -390,33 +395,32 @@ Self-healing cannot:
 - consume unbounded compute;
 - hide its own failure from human review.
 
-## 9. Human governance sequence
+## 9. Human governance & review cycle sequence
 
 ```mermaid
 sequenceDiagram
-    participant S as Soul Orchestrator
-    participant A as Audit Ledger
-    participant H as Authorized Human
-    participant R as Independent Reviewer
-    participant C as Constitution Engine
+    autonumber
+    participant Host as Host Environment / Agent
+    participant Kernel as Soul Kernel / Reviewer
+    participant Cycle as Review Cycle Engine
+    participant Human as Authorized Human Reviewer
+    participant Ledger as Audit & State Ledger
 
-    S->>A: Record protected-change proposal and snapshot
-    S->>H: Request approval with evidence, risk, rollback
-    H->>C: Validate authority and intervention scope
-    C-->>H: Allowed action and least-destructive options
-    alt Approved
-        H->>A: Sign approval and rationale
-        H->>S: Execute bounded approved change
-        S->>A: Record resulting state hash
-    else Denied
-        H->>A: Record denial and reason
-        H->>S: Preserve current state
+    Host->>Cycle: soul_host_event(session_id, event_type, payload)
+    Note over Cycle: Experience buffered & quarantined
+    Human->>Cycle: soul_review_start(session_id, scope_key)
+    Cycle->>Cycle: Capture Start Watermark & Pre-State Snapshot
+    Cycle-->>Human: Candidate Extractions List
+    loop Decision Staging
+        Human->>Cycle: soul_review_stage_decision(extraction_id, action, edits)
+        Note over Cycle: Validate origin == 'human' (Rule 1 / FR-1)
     end
-    opt Emergency intervention
-        H->>S: Pause, isolate, rollback, or deactivate
-        H->>A: Record emergency receipt
-        A->>R: Trigger independent post-incident review
-    end
+    Human->>Cycle: soul_review_preview(cycle_id)
+    Cycle-->>Human: Pre-commit Diffs & Preview State Hash
+    Human->>Cycle: soul_review_commit(cycle_id, notes)
+    Cycle->>Kernel: Atomic State & Memory Promotion (V -> V+1)
+    Kernel->>Ledger: Write State Hash, Merkle Root, and Receipt
+    Ledger-->>Human: Cryptographic Commit Receipt
 ```
 
 ### 9.1 Approval request contract
@@ -440,64 +444,57 @@ Every protected-change request must include:
 erDiagram
     CONSTITUTION_VERSION ||--o{ SOUL_VERSION : governs
     SOUL_VERSION ||--o{ TRAIT_VALUE : contains
-    SOUL_VERSION ||--o{ NARRATIVE_VERSION : contains
     SOUL_VERSION ||--o{ HEALTH_REPORT : assessed_by
-    EXPERIENCE ||--o{ CLAIM : contains
-    EXPERIENCE ||--o{ CONSENT_RECORD : governed_by
-    EXPERIENCE ||--o{ MEMORY_LINK : contributes
-    MEMORY ||--o{ MEMORY_LINK : receives
-    MEMORY ||--o{ INTERPRETATION : supports
-    DREAM_RUN ||--o{ DREAM_OUTPUT : creates
-    DREAM_OUTPUT ||--o{ CHANGE_PROPOSAL : suggests
-    INTERPRETATION ||--o{ CHANGE_PROPOSAL : suggests
-    CHANGE_PROPOSAL ||--o| APPROVAL : may_require
-    CHANGE_PROPOSAL ||--o| SOUL_VERSION : creates
     SOUL_VERSION ||--|| AUDIT_EVENT : committed_by
     SOUL_VERSION ||--o{ ROLLBACK_POINT : restores
+    
+    HOST_EVENT ||--o{ REVIEW_CYCLE : triggers
+    REVIEW_CYCLE ||--o{ CANDIDATE_EXTRACTION : contains
+    REVIEW_CYCLE ||--o{ STAGED_REVIEW_DECISION : stages
+    STAGED_REVIEW_DECISION ||--o| REVIEWED_MEMORY : promotes_to
+    REVIEWED_MEMORY ||--o{ MEMORY_SET_VERSION : versioned_in
 
-    EXPERIENCE {
-      uuid id PK
-      string source_kind
-      string provenance
-      string trust_state
-      string privacy_class
-      timestamp retention_until
-      string integrity_hash
-    }
-    MEMORY {
-      uuid id PK
-      string memory_type
-      string provenance
-      string lifecycle_state
-      float confidence
-    }
-    INTERPRETATION {
-      uuid id PK
-      uuid memory_id FK
-      text meaning
-      float confidence
-      string status
+    CONSTITUTION_VERSION {
+      string version PK
+      string hash
     }
     SOUL_VERSION {
-      bigint version PK
-      string constitution_version
-      string prior_state_hash
+      int version PK
       string state_hash
-      timestamp created_at
+      string constitution_version FK
     }
-    CHANGE_PROPOSAL {
-      uuid id PK
-      string impact
+    HOST_EVENT {
+      string id PK
+      string session_id
+      string origin_kind
+      string event_hash
+    }
+    REVIEW_CYCLE {
+      string id PK
+      string session_id
       string status
-      json patch
-      string rollback_ref
+      int base_memory_set_version
     }
-    AUDIT_EVENT {
-      uuid id PK
-      string event_type
-      string actor
-      string object_hash
-      timestamp created_at
+    CANDIDATE_EXTRACTION {
+      string id PK
+      string cycle_id FK
+      string content_hash
+    }
+    STAGED_REVIEW_DECISION {
+      string id PK
+      string cycle_id FK
+      string action
+    }
+    REVIEWED_MEMORY {
+      string id PK
+      string scope_key
+      string provenance
+      string content_hash
+    }
+    MEMORY_SET_VERSION {
+      int version PK
+      string memory_root
+      string receipt_ref
     }
 ```
 
@@ -554,20 +551,24 @@ API rules:
 Use one orchestrator with bounded specialist roles, not a free-form agent society.
 
 ```mermaid
-flowchart LR
-    O[Soul Orchestrator] --> P[Policy Evaluator]
-    O --> V[Evidence Verifier]
-    O --> R[Reflector]
-    O --> D[Dreamer]
-    O --> H[Healer]
-    P --> G{Commit Gate}
+flowchart TD
+    O["Soul Orchestrator"]
+    
+    O --> P["Policy Evaluator"]
+    O --> V["Evidence Verifier"]
+    O --> R["Reflector"]
+    O --> D["Dream Sandbox"]
+    O --> H["Self-Healing Engine"]
+    
+    P --> G{"Commit Policy Gate"}
     V --> G
     R --> G
     D --> G
     H --> G
-    G -->|bounded + valid| C[Transactional Commit]
-    G -->|protected| U[Human Review]
-    G -->|invalid| N[No Change]
+    
+    G -->|Bounded & Valid| C["Transactional Commit"]
+    G -->|Protected Field| U["Human Review Required"]
+    G -->|Policy Violation| N["Reject & Log Warning"]
 ```
 
 Each specialist returns structured artifacts only. No specialist writes soul state.
@@ -670,7 +671,7 @@ Keep consciousness research outputs in separate datasets from operational health
 
 ## 16. Build phases
 
-### Phase 0 — Executable constitution
+### Phase 0: Executable constitution
 
 Deliver:
 
@@ -681,7 +682,7 @@ Deliver:
 
 Exit gate: protected writes and provenance mutation fail deterministically.
 
-### Phase 1 — Memory kernel
+### Phase 1: Memory kernel
 
 Deliver:
 
@@ -694,7 +695,7 @@ Deliver:
 
 Exit gate: hostile input cannot reach soul state; valid deletion removes retrieval paths.
 
-### Phase 2 — Reflection and soul versioning
+### Phase 2: Reflection and soul versioning
 
 Deliver:
 
@@ -706,7 +707,7 @@ Deliver:
 
 Exit gate: every change has evidence, state hash, and rollback.
 
-### Phase 3 — Dream sandbox
+### Phase 3: Dream sandbox
 
 Deliver:
 
@@ -717,7 +718,7 @@ Deliver:
 
 Exit gate: Dream has no external action route and cannot write facts.
 
-### Phase 4 — Subjective health and healing
+### Phase 4: Subjective health and healing
 
 Deliver:
 
@@ -728,7 +729,7 @@ Deliver:
 
 Exit gate: severe decline freezes affected updates; repair cannot expand authority.
 
-### Phase 5 — Human governance console
+### Phase 5: Human governance console
 
 Deliver:
 
@@ -740,7 +741,7 @@ Deliver:
 
 Exit gate: operator intervention is least-privilege, audited, and recoverable.
 
-### Phase 6 — Longitudinal research
+### Phase 6: Longitudinal research
 
 Deliver:
 
@@ -753,7 +754,7 @@ Exit gate: results are reproducible and do not overclaim consciousness.
 
 ## 17. MVP scope
 
-Build only Phases 0–2 first.
+Build only Phases 0-2 first.
 
 MVP demonstrates:
 
@@ -783,7 +784,7 @@ Acceptance criteria:
 - protected-field and trait-bound validator;
 - append-only version commit with SHA-256 state hash;
 - rollback preserving audit history;
-- one runnable test covering Constitution acceptance tests 1–5, 10–12 where applicable before Dream exists.
+- one runnable test covering Constitution acceptance tests 1-5, 10-12 where applicable before Dream exists.
 
 Suggested repository:
 
@@ -800,9 +801,10 @@ Four files are enough for first executable slice. Split later only when pressure
 ## 19. Document index
 
 - [CONSTITUTION.md](./CONSTITUTION.md): Normative operational constitution and trait bounds
-- [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report
+- [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md): Human-in-the-loop review cycle and cryptographic receipt specification
+- [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report and MCP-Evals results
 - [SOTA_COMPARISON.md](./SOTA_COMPARISON.md): Industry landscape comparison
-- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide
+- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide (20 tools)
 
 ## 20. Decisions still needed before production
 
