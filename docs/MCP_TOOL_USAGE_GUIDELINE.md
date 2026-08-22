@@ -16,15 +16,16 @@ This guide documents the operational setup for the cognitive MCP tool stack (`So
          │                                  │                                  │
          ▼                                  ▼                                  ▼
 ┌───────────────────┐              ┌───────────────────┐              ┌───────────────────┐
-│     Soul MCP      │              │    Synapse OS     │              │   Semantica MCP   │
-│ Identity & Traits │              │  Typed Memory DB  │              │ Decision Provenance│
+│ Soul Engine v1.1.0│              │    Synapse OS     │              │   Semantica MCP   │
+│ 20 MCP Tools Suite│              │  Typed Memory DB  │              │ Decision Provenance│
 └────────┬──────────┘              └────────┬──────────┘              └────────┬──────────┘
          │                                  │                                  │
          ▼                                  ▼                                  ▼
 ┌───────────────────┐              ┌───────────────────┐              ┌───────────────────┐
-│ Trait Velocity,   │              │ Semantic/Episodic/│              │ Entity Graphs,    │
-│ Constitution,     │              │ Procedural Memory,│              │ Causal Chains,    │
-│ Dreaming, Heal    │              │ Entity Anchoring  │              │ Precedents        │
+│ • Identity & Bio  │              │ Semantic/Episodic/│              │ Entity Graphs,    │
+│ • Homeostasis     │              │ Procedural Memory,│              │ Causal Chains,    │
+│ • Review Cycle    │              │ Entity Anchoring  │              │ Precedents        │
+│ • Merkle Receipts │              │                   │              │                   │
 └───────────────────┘              └───────────────────┘              └───────────────────┘
 ```
 
@@ -130,7 +131,7 @@ sequenceDiagram
     autonumber
     participant User
     participant Agent
-    participant Soul as Soul MCP
+    participant Soul as Soul MCP (v1.1.0)
     participant Synapse as Synapse OS
     participant Semantica as Semantica MCP
 
@@ -140,15 +141,26 @@ sequenceDiagram
     Agent->>Synapse: memory_digest()
     Synapse-->>Agent: Pinned Facts & Preferences
 
-    Note over Agent: Task Execution
+    Note over Agent: Task Execution & Event Ingestion
     User->>Agent: "Add multi-profile support to user dashboard"
+    Agent->>Soul: soul_host_event(event_type="user_query", payload={...})
     Agent->>Semantica: query_decisions("profile architecture")
     Semantica-->>Agent: Historical Precedents
     Agent->>Semantica: record_decision("Use isolated state keys")
 
-    Note over Agent: State Update & Learning
+    Note over Agent: State Update & Bio-Homeostasis
     Agent->>Synapse: memory_write(type="semantic", entityKey="app.profile_mode")
+    Agent->>Soul: soul_reward(dopamine=0.1, serotonin=0.05)
     Agent->>Soul: soul_reflect()
+
+    Note over User,Soul: Human Review Cycle Governance
+    User->>Soul: soul_review_start(session_id="s1")
+    Soul-->>User: Candidate Extractions List
+    User->>Soul: soul_review_stage_decision(extraction_id="e1", action="remember")
+    User->>Soul: soul_review_preview(cycle_id="c1")
+    Soul-->>User: Pre-Commit Diff & State Hash Preview
+    User->>Soul: soul_review_commit(cycle_id="c1", origin_kind="human")
+    Soul-->>User: Cryptographic Commit Receipt (V -> V+1)
 ```
 
 ---
@@ -160,15 +172,24 @@ At the start of a session, perform two initial calls:
 
 ---
 
-### Step 2: In-task memory and decision logging
+### Step 2: In-task memory, event ingestion, and decision logging
+* When receiving critical user inputs or system milestones, call `soul_host_event` to buffer events into the tamper-evident hash chain.
 * When discovering new preferences or environment facts, call `memory_write` with an explicit `entityKey` so updates supersede older facts.
 * When choosing an architectural direction or bug fix, call `record_decision` via Semantica to record the technical rationale.
 
 ---
 
-### Step 3: Session reflection and consolidation
+### Step 3: Session reflection and neuromodulation
+* Call `soul_reward` to reinforce successful reasoning and reduce cortisol stress.
 * Call `soul_reflect` to summarize interaction logs and evaluate trait adjustments.
 * If memory or identity drift is detected, run `soul_verify` or `soul_heal`.
+
+---
+
+### Step 4: Human-in-the-loop review governance
+* When extractions are ready, open a review cycle via `soul_review_start`.
+* Stage human decisions (`soul_review_stage_decision`) with explicit origin verification (`origin_kind="human"`).
+* Preview diffs via `soul_review_preview` and finalize atomic state transitions with `soul_review_commit`.
 
 ---
 
