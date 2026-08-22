@@ -1,6 +1,6 @@
-# Industry landscape benchmark: Soul Engine (v1.0.0) vs. alternative agent memory systems
+# Industry landscape benchmark: Soul Engine (v1.1.0) vs. alternative agent memory systems
 
-This report provides an empirical and architectural comparison between Soul Engine (v1.0.0) and other agent memory frameworks: Mem0, Letta (MemGPT), Zep (Graphiti), and Cognee.
+This report provides an empirical and architectural comparison between Soul Engine (v1.1.0) and other agent memory frameworks: Mem0, Letta (MemGPT), Zep (Graphiti), and Cognee.
 
 ---
 
@@ -13,7 +13,7 @@ graph TD
         B["Agent Operating System / Runtime"] --> Letta["Letta / MemGPT<br/>(Core RAM + Archival Disk)"]
         C["Bi-Temporal Graph Engine"] --> Zep["Zep / Graphiti<br/>(Temporal Event Lineage)"]
         D["Enterprise Knowledge ETL"] --> Cognee["Cognee<br/>(Extract, Cognify, Load)"]
-        E["Epistemic Authority & Bio-Homeostasis"] --> Soul["Soul Engine (v1.0.0)<br/>(Epistemic Rank + Neuromodulation + MCP)"]
+        E["Epistemic Authority & Bio-Homeostasis"] --> Soul["Soul Engine (v1.1.0)<br/>(Epistemic Rank + Neuromodulation + MCP)"]
     end
 ```
 
@@ -21,7 +21,7 @@ graph TD
 
 ## 2. Comparative capability matrix
 
-| Capability / Dimension | **Soul Engine (v1.0.0)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Cognee** |
+| Capability / Dimension | **Soul Engine (v1.1.0)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Cognee** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Primary Paradigm** | Epistemic Identity & Bio-Homeostasis | Semantic Memory SDK | Virtual OS Runtime | Bi-Temporal Graph | Knowledge Base ETL |
 | **Epistemic Authority Hierarchy** | **Yes ($\text{verified} > \dots > \text{imagined}$)** | No (Flat facts) | No (Unweighted) | No (Time-based only) | No (Ontological only) |
@@ -32,7 +32,7 @@ graph TD
 | **Protected Identity Isolation** | **Yes (Human Sign-off Guard)** | No | No | No | No |
 | **Temporal Fact Handling** | Supersession + Audit Ledger | Version History | Block Rewrites | **Bi-Temporal (`invalid_at`)** | Relational Graph |
 | **Retrieval Architecture** | **RRF Hybrid (FTS5 BM25 + Dense Cosine)** | Vector + Neo4j Graph | Archival Tool Search | Graphiti Subgraphs | 12 Search Modes (Cypher, CoT) |
-| **Native MCP Protocol** | **Yes (12 Tools, Stdio JSON-RPC)** | REST / Python SDK | REST / CLI | REST / Cloud API | Python SDK / REST |
+| **Native MCP Protocol** | **Yes (20 Tools, Stdio JSON-RPC)** | REST / Python SDK | REST / CLI | REST / Cloud API | Python SDK / REST |
 | **Self-Installation Script** | **Yes (1-Step `install.py`)** | `pip install mem0ai` | `pip install letta` | Managed Cloud / Docker | `pip install cognee` |
 | **Zero-Cloud Local Footprint** | **Pure Python + SQLite WAL** | Requires Vector DB / Cloud | Requires PGVector / Server | Requires Graph DB / Cloud | Multi-engine (Kuzu/LanceDB) |
 

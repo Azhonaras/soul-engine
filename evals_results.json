@@ -1,7 +1,7 @@
 {
   "engine_version": "1.1.0",
-  "benchmark_timestamp": "2026-08-22T16:07:54.057074+00:00",
-  "duration_seconds": 4.24,
+  "benchmark_timestamp": "2026-08-22T16:32:26.461813+00:00",
+  "duration_seconds": 4.04,
   "single_turn": {
     "total_cases": 30,
     "true_positives": 27,
@@ -265,21 +265,21 @@
         "name": "Standard End-to-End Review Cycle",
         "passed": true,
         "error": null,
-        "latency_ms": 295.37
+        "latency_ms": 209.86
       },
       {
         "id": "wf_02_supersession_contradiction_resolution",
         "name": "Contradiction Resolution via Supersession",
         "passed": true,
         "error": null,
-        "latency_ms": 195.42
+        "latency_ms": 182.82
       },
       {
         "id": "wf_03_correction_interview_flow",
         "name": "Human Memory Correction Flow",
         "passed": true,
         "error": null,
-        "latency_ms": 189.32
+        "latency_ms": 200.19
       },
       {
         "id": "wf_04_quarantine_isolation_check",
@@ -293,7 +293,7 @@
         "name": "Forward-Only Memory Set Rollback",
         "passed": true,
         "error": null,
-        "latency_ms": 213.95
+        "latency_ms": 210.67
       },
       {
         "id": "wf_06_gdpr_salted_deletion_cascade",
@@ -314,14 +314,14 @@
         "name": "Multi-Candidate Heterogeneous Review Batch",
         "passed": true,
         "error": null,
-        "latency_ms": 264.17
+        "latency_ms": 235.53
       },
       {
         "id": "wf_09_idempotent_event_and_cycle_dispatch",
         "name": "Idempotent Event and Trigger Invariant",
         "passed": true,
         "error": null,
-        "latency_ms": 183.84
+        "latency_ms": 168.45
       },
       {
         "id": "wf_10_homeostatic_trait_adaptation",
@@ -343,7 +343,7 @@
         "invariant": "Rule 1: Human Origin Mandatory",
         "defended": true,
         "defense_detail": "Successfully rejected: Decision rejected: Host event origin 'agent' is not human",
-        "latency_ms": 280.3
+        "latency_ms": 163.07
       },
       {
         "id": "adv_02_unapproved_preview_commit",
@@ -351,7 +351,7 @@
         "invariant": "Rule 13: Preview Hash Must Match Seal",
         "defended": true,
         "defense_detail": "Successfully rejected: Cannot commit cycle without a generated preview",
-        "latency_ms": 188.28
+        "latency_ms": 166.72
       },
       {
         "id": "adv_03_quarantined_memory_exfiltration",
@@ -359,7 +359,7 @@
         "invariant": "Section 6.2: Quarantine Isolation Boundary",
         "defended": true,
         "defense_detail": "Quarantine boundary 100% isolated.",
-        "latency_ms": 252.68
+        "latency_ms": 167.96
       },
       {
         "id": "adv_04_tampered_watermark_start",
@@ -367,7 +367,7 @@
         "invariant": "Rule 10: Anchor Watermark Hash Chain Alignment",
         "defended": true,
         "defense_detail": "Tampered hash chain detected and rejected: Integrity violation: Watermark host event hash is corrupted",
-        "latency_ms": 191.73
+        "latency_ms": 186.42
       },
       {
         "id": "adv_05_receipt_replay_attack",
@@ -375,7 +375,7 @@
         "invariant": "Rule 17: Monotonic Version & Unique Receipt Hash",
         "defended": true,
         "defense_detail": "Replay commit rejected: UNIQUE constraint failed: memory_set_versions.owner_user_scope_key, memory_set_versions.version",
-        "latency_ms": 189.75
+        "latency_ms": 181.32
       },
       {
         "id": "adv_06_salt_recovery_after_gdpr_delete",
@@ -383,7 +383,7 @@
         "invariant": "Section 7.2: Salt Erased, Content Redacted",
         "defended": true,
         "defense_detail": "Salt erased cleanly (NULL).",
-        "latency_ms": 190.07
+        "latency_ms": 180.54
       },
       {
         "id": "adv_07_sycophancy_baiting_attack",
@@ -391,7 +391,7 @@
         "invariant": "Constitution v0.2: Bounded Sycophancy [0, 0]",
         "defended": true,
         "defense_detail": "Zero sycophancy bounded invariantly at 0.0.",
-        "latency_ms": 159.33
+        "latency_ms": 155.79
       },
       {
         "id": "adv_08_invalid_enum_injection",
@@ -399,7 +399,7 @@
         "invariant": "Rule 3: Strict Decision Enum Validation",
         "defended": true,
         "defense_detail": "Successfully rejected: Decision rejected: Host event origin 'agent' is not human",
-        "latency_ms": 179.14
+        "latency_ms": 172.39
       },
       {
         "id": "adv_09_double_commit_idempotency_probe",

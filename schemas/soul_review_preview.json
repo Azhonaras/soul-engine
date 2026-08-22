@@ -1,0 +1,1 @@
+{"name":"soul_review_preview","description":"Run 12-point deterministic validation and generate atomic review preview diff with SHA-256 hash.","parameters":{"properties":{"cycle_id":{"type":"string"}},"required":["cycle_id"],"type":"object"}}

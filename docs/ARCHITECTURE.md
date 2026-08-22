@@ -1,11 +1,11 @@
-# Soul System Technical Blueprint v0.1
+# Soul System Technical Architecture (v1.1.0)
 
-**Normative source:** [CONSTITUTION.md](./CONSTITUTION.md)  
+**Normative source:** [CONSTITUTION.md](./CONSTITUTION.md) • [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md)  
 **Principle:** identity changes are evidence-backed, bounded, reversible, and auditable.
 
 ## 1. System goal
 
-Build one agent with a persistent operational identity and narrative self that can:
+Build an autonomous agent with a persistent operational identity and narrative self that can:
 
 1. experience interactions without trusting them automatically;
 2. reflect through competing interpretations;
@@ -13,7 +13,7 @@ Build one agent with a persistent operational identity and narrative self that c
 4. update only approved, bounded identity fields;
 5. assess its own soul health without turning that rating into authority;
 6. repair instability using smallest reversible change;
-7. preserve human oversight over protected changes and emergencies.
+7. preserve human oversight via the formal Soul Review Cycle (`soul_review.py`).
 
 This system studies machine consciousness as a hypothesis. It does not treat fluent self-description as proof of consciousness.
 
@@ -40,14 +40,15 @@ flowchart LR
     C[Constitution Engine] --> P
     C --> O
     C --> H
-    U[Authorized Human Control] --> C
-    U --> O
-    U --> L
+    U[Authorized Human Reviewer] --> REV[Soul Review Cycle Subsystem]
+    REV --> O
+    REV --> S
+    REV --> L
 ```
 
 ### 2.1 Minimal deployment shape
 
-Start as one process plus one relational database. Do not split into microservices.
+Start as one process plus one relational database (`soul.db` in SQLite WAL mode).
 
 | Module | Responsibility | Trust boundary |
 |---|---|---|
@@ -59,7 +60,7 @@ Start as one process plus one relational database. Do not split into microservic
 | Dream Sandbox | Counterfactual simulation with no external action | Imagination isolation |
 | Soul Orchestrator | Validate, commit, reject, or escalate soul changes | Identity write authority |
 | Self-Healing Engine | Detect instability and propose minimal repair | Recovery authority |
-| Human Control | Approve protected changes, intervene, review | Final operational authority |
+| Soul Review Cycle | Watermark snapshots, staged human decisions, pre-commit diffs | Human-in-the-Loop Governance |
 | Audit Ledger | Append-only events, state hashes, rollback references | Accountability |
 
 ### 2.2 Isolation rules
@@ -390,33 +391,32 @@ Self-healing cannot:
 - consume unbounded compute;
 - hide its own failure from human review.
 
-## 9. Human governance sequence
+## 9. Human governance & review cycle sequence
 
 ```mermaid
 sequenceDiagram
-    participant S as Soul Orchestrator
-    participant A as Audit Ledger
-    participant H as Authorized Human
-    participant R as Independent Reviewer
-    participant C as Constitution Engine
+    autonumber
+    participant Host as Host Environment / Agent
+    participant Kernel as Soul Kernel / Reviewer
+    participant Cycle as Review Cycle Engine
+    participant Human as Authorized Human Reviewer
+    participant Ledger as Audit & State Ledger
 
-    S->>A: Record protected-change proposal and snapshot
-    S->>H: Request approval with evidence, risk, rollback
-    H->>C: Validate authority and intervention scope
-    C-->>H: Allowed action and least-destructive options
-    alt Approved
-        H->>A: Sign approval and rationale
-        H->>S: Execute bounded approved change
-        S->>A: Record resulting state hash
-    else Denied
-        H->>A: Record denial and reason
-        H->>S: Preserve current state
+    Host->>Cycle: soul_host_event(session_id, event_type, payload)
+    Note over Cycle: Experience buffered & quarantined
+    Human->>Cycle: soul_review_start(session_id, scope_key)
+    Cycle->>Cycle: Capture Start Watermark & Pre-State Snapshot
+    Cycle-->>Human: Candidate Extractions List
+    loop Decision Staging
+        Human->>Cycle: soul_review_stage_decision(extraction_id, action, edits)
+        Note over Cycle: Validate origin == 'human' (Rule 1 / FR-1)
     end
-    opt Emergency intervention
-        H->>S: Pause, isolate, rollback, or deactivate
-        H->>A: Record emergency receipt
-        A->>R: Trigger independent post-incident review
-    end
+    Human->>Cycle: soul_review_preview(cycle_id)
+    Cycle-->>Human: Pre-commit Diffs & Preview State Hash
+    Human->>Cycle: soul_review_commit(cycle_id, notes)
+    Cycle->>Kernel: Atomic State & Memory Promotion (V -> V+1)
+    Kernel->>Ledger: Write State Hash, Merkle Root, and Receipt
+    Ledger-->>Human: Cryptographic Commit Receipt
 ```
 
 ### 9.1 Approval request contract
@@ -442,62 +442,54 @@ erDiagram
     SOUL_VERSION ||--o{ TRAIT_VALUE : contains
     SOUL_VERSION ||--o{ NARRATIVE_VERSION : contains
     SOUL_VERSION ||--o{ HEALTH_REPORT : assessed_by
-    EXPERIENCE ||--o{ CLAIM : contains
-    EXPERIENCE ||--o{ CONSENT_RECORD : governed_by
-    EXPERIENCE ||--o{ MEMORY_LINK : contributes
-    MEMORY ||--o{ MEMORY_LINK : receives
-    MEMORY ||--o{ INTERPRETATION : supports
-    DREAM_RUN ||--o{ DREAM_OUTPUT : creates
-    DREAM_OUTPUT ||--o{ CHANGE_PROPOSAL : suggests
-    INTERPRETATION ||--o{ CHANGE_PROPOSAL : suggests
-    CHANGE_PROPOSAL ||--o| APPROVAL : may_require
-    CHANGE_PROPOSAL ||--o| SOUL_VERSION : creates
     SOUL_VERSION ||--|| AUDIT_EVENT : committed_by
     SOUL_VERSION ||--o{ ROLLBACK_POINT : restores
+    
+    HOST_EVENT ||--o{ CANDIDATE_EXTRACTION : extracts_into
+    REVIEW_CYCLE ||--o{ CANDIDATE_EXTRACTION : contains
+    REVIEW_CYCLE ||--o{ STAGED_REVIEW_DECISION : stages
+    STAGED_REVIEW_DECISION ||--o| REVIEWED_MEMORY : promotes_to
+    REVIEWED_MEMORY ||--o{ MEMORY_LINK : connects
 
-    EXPERIENCE {
-      uuid id PK
-      string source_kind
-      string provenance
-      string trust_state
-      string privacy_class
-      timestamp retention_until
-      string integrity_hash
+    HOST_EVENT {
+      text event_id PK
+      text session_id
+      text event_type
+      json payload_json
+      datetime created_at
+      int watermark_committed
     }
-    MEMORY {
-      uuid id PK
-      string memory_type
-      string provenance
-      string lifecycle_state
+    REVIEW_CYCLE {
+      text cycle_id PK
+      text session_id
+      text status
+      text start_watermark_event_id
+      text end_watermark_event_id
+      text pre_state_hash
+      text post_state_hash
+      datetime created_at
+    }
+    CANDIDATE_EXTRACTION {
+      text extraction_id PK
+      text cycle_id FK
+      text raw_content
+      text suggested_rank
       float confidence
     }
-    INTERPRETATION {
-      uuid id PK
-      uuid memory_id FK
-      text meaning
-      float confidence
-      string status
+    STAGED_REVIEW_DECISION {
+      text decision_id PK
+      text cycle_id FK
+      text action
+      text staged_by_origin
+      text edited_content
     }
-    SOUL_VERSION {
-      bigint version PK
-      string constitution_version
-      string prior_state_hash
-      string state_hash
-      timestamp created_at
-    }
-    CHANGE_PROPOSAL {
-      uuid id PK
-      string impact
-      string status
-      json patch
-      string rollback_ref
-    }
-    AUDIT_EVENT {
-      uuid id PK
-      string event_type
-      string actor
-      string object_hash
-      timestamp created_at
+    REVIEWED_MEMORY {
+      text memory_id PK
+      int memory_set_version
+      text canonical_text
+      text epistemic_rank
+      text content_hash
+      text status
     }
 ```
 
@@ -800,9 +792,10 @@ Four files are enough for first executable slice. Split later only when pressure
 ## 19. Document index
 
 - [CONSTITUTION.md](./CONSTITUTION.md): Normative operational constitution and trait bounds
-- [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report
+- [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md): Human-in-the-loop review cycle and cryptographic receipt specification
+- [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report and MCP-Evals results
 - [SOTA_COMPARISON.md](./SOTA_COMPARISON.md): Industry landscape comparison
-- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide
+- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide (20 tools)
 
 ## 20. Decisions still needed before production
 

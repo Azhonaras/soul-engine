@@ -58,7 +58,7 @@ The installer initializes your local database (`~/.soul/soul.db`) and registers 
 ## Architecture
 
 ```
-                         THE SOUL COGNITIVE LOOP
+                         THE SOUL COGNITIVE LOOP (v1.1.0)
  ┌─────────────────────────────────────────────────────────────────────────┐
  │ 1. INGESTION & DEFENSE                                                  │
  │    New Observation ──► Secret Scrubber ──► Epistemic Provenance Check  │
@@ -74,7 +74,40 @@ The installer initializes your local database (`~/.soul/soul.db`) and registers 
  ├─────────────────────────────────────────────────────────────────────────┤
  │ 4. CRYPTOGRAPHIC STATE LEDGER                                           │
  │    SHA-256 Merkle Chain ──► Point-in-Time State Rollback (< 2 ms)       │
+ ├─────────────────────────────────────────────────────────────────────────┤
+ │ 5. HUMAN REVIEW CYCLE GOVERNANCE (v1.1.0)                               │
+ │    Watermark Freezes ──► Pre-Commit Diffs ──► SHA-256 Commit Receipts   │
+ │    Forward-Only Rollback (V → V+1) ──► Salt-Nullified Privacy Erasure   │
  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+```mermaid
+flowchart TD
+    subgraph INGESTION [" 1. Ingestion & Provenance "]
+        E[Host Interaction Event] --> S[Secret Scrubber]
+        S --> P{Epistemic Rank Check}
+        P -->|verified / observed| Q[Quarantine Candidate]
+    end
+
+    subgraph HOMEOSTASIS [" 2. Bio-Homeostatic Kernel "]
+        Q --> NLI[Contradiction & NLI Engine]
+        NLI --> BIO[Neuromodulation: Dopamine / Cortisol / Serotonin]
+        BIO --> TRAIT[Bounded Trait Clamping: Min-Max Bounds]
+    end
+
+    subgraph REVIEW [" 3. Human Review Cycle (v1.1.0) "]
+        TRAIT --> START[soul_review_start: Freeze Watermark]
+        START --> STAGE[soul_review_stage_decision: 5 Actions]
+        STAGE --> PREV[soul_review_preview: Pre-Commit Unified Diff]
+        PREV --> COMMIT[soul_review_commit: Human Origin Verified]
+    end
+
+    subgraph LEDGER [" 4. Cryptographic Storage & Ledger "]
+        COMMIT --> DB[(SQLite WAL: reviewed_memories)]
+        COMMIT --> HASH[SHA-256 Merkle Commit Receipt]
+        HASH --> RB[Forward-Only Rollback: V to V+1]
+        HASH --> GDPR[GDPR Salt-Nullified Erasure]
+    end
 ```
 
 ---
@@ -164,8 +197,8 @@ python examples/demo_live_agent.py
 
 ## Contributors & attribution
 
-* **Azhonaras (NBada)** — Architecture, Epistemic Framework, & Lead Author
-* **Antigravity (UPI)** — Co-designer, Implementation & Verification Assistant (Google DeepMind)
+* **Azhonaras (Navid Badami)** — Creator, Lead Architect & Maintainer
+* **Antigravity (UPI)** — Co-author & Verification Assistant (v1.1.0)
 * **Soul Open Source Community** — Contributions, Feedback & Testing
 
 ---
@@ -173,4 +206,4 @@ python examples/demo_live_agent.py
 ## License
 
 Soul Engine is released under the open-source [MIT License](LICENSE).  
-Copyright (c) 2026 Azhonaras (NBada), Antigravity (UPI), and Soul Contributors.
+Copyright (c) 2026 Azhonaras (Navid Badami), Antigravity (UPI), and Soul Contributors.
