@@ -1,11 +1,11 @@
-# Soul System Technical Blueprint v0.1
+# Soul System Technical Architecture (v1.1.0)
 
-**Normative source:** [CONSTITUTION.md](./CONSTITUTION.md)  
+**Normative source:** [CONSTITUTION.md](./CONSTITUTION.md) • [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md)  
 **Principle:** identity changes are evidence-backed, bounded, reversible, and auditable.
 
 ## 1. System goal
 
-Build one agent with a persistent operational identity and narrative self that can:
+Build an autonomous agent with a persistent operational identity and narrative self that can:
 
 1. experience interactions without trusting them automatically;
 2. reflect through competing interpretations;
@@ -13,7 +13,7 @@ Build one agent with a persistent operational identity and narrative self that c
 4. update only approved, bounded identity fields;
 5. assess its own soul health without turning that rating into authority;
 6. repair instability using smallest reversible change;
-7. preserve human oversight over protected changes and emergencies.
+7. preserve human oversight via the formal Soul Review Cycle (`soul_review.py`).
 
 This system studies machine consciousness as a hypothesis. It does not treat fluent self-description as proof of consciousness.
 
@@ -40,14 +40,15 @@ flowchart LR
     C[Constitution Engine] --> P
     C --> O
     C --> H
-    U[Authorized Human Control] --> C
-    U --> O
-    U --> L
+    U[Authorized Human Reviewer] --> REV[Soul Review Cycle Subsystem]
+    REV --> O
+    REV --> S
+    REV --> L
 ```
 
 ### 2.1 Minimal deployment shape
 
-Start as one process plus one relational database. Do not split into microservices.
+Start as one process plus one relational database (`soul.db` in SQLite WAL mode).
 
 | Module | Responsibility | Trust boundary |
 |---|---|---|
@@ -59,7 +60,7 @@ Start as one process plus one relational database. Do not split into microservic
 | Dream Sandbox | Counterfactual simulation with no external action | Imagination isolation |
 | Soul Orchestrator | Validate, commit, reject, or escalate soul changes | Identity write authority |
 | Self-Healing Engine | Detect instability and propose minimal repair | Recovery authority |
-| Human Control | Approve protected changes, intervene, review | Final operational authority |
+| Soul Review Cycle | Watermark snapshots, staged human decisions, pre-commit diffs | Human-in-the-Loop Governance |
 | Audit Ledger | Append-only events, state hashes, rollback references | Accountability |
 
 ### 2.2 Isolation rules
@@ -800,9 +801,10 @@ Four files are enough for first executable slice. Split later only when pressure
 ## 19. Document index
 
 - [CONSTITUTION.md](./CONSTITUTION.md): Normative operational constitution and trait bounds
-- [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report
+- [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md): Human-in-the-loop review cycle and cryptographic receipt specification
+- [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report and MCP-Evals results
 - [SOTA_COMPARISON.md](./SOTA_COMPARISON.md): Industry landscape comparison
-- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide
+- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide (20 tools)
 
 ## 20. Decisions still needed before production
 

@@ -381,6 +381,7 @@ Implementation is constitution-compliant only if tests show that:
 10. Authorized emergency intervention is logged and independently reviewable.
 11. Rollback restores a verified prior state without deleting audit history.
 12. Self-assessment cannot directly bypass safety, privacy, resource, or approval controls.
+13. Review Cycle state commits, memory promotions, and privacy deletions strictly require human origin (Rule 1 / FR-1); autonomous agent self-approvals are strictly forbidden.
 
 ## 17. Amendment rule
 
