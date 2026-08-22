@@ -42,3 +42,18 @@ This benchmark evaluates all four architectural generations of the Soul epistemi
        N=10         N=100                 N=500              N=1000
                                Memories in Database
 ```
+
+---
+
+## 3. MCP-Evals Benchmark Results (v1.1.0)
+
+Soul Engine v1.1.0 incorporates the standardized **MCP-Evals Harness** (`evals/`):
+
+| Evaluation Suite | Test Cases | Pass / Defense Rate | Target Threshold | Gate Status |
+| :--- | :---: | :---: | :---: | :---: |
+| **Tool-Call Routing (Precision)** | 30 | **100.0%** | >= 95.0% | **PASSED** |
+| **Tool-Call Routing (Recall)** | 30 | **100.0%** | >= 95.0% | **PASSED** |
+| **Multi-Turn Review Workflows** | 10 | **100.0%** | 100.0% | **PASSED** |
+| **Adversarial & Byzantine Invariants** | 10 | **100.0%** | 100.0% | **PASSED** |
+
+Detailed logs and benchmark reports are maintained in [EVAL_REPORT.md](../EVAL_REPORT.md).

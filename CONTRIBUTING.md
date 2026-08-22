@@ -74,4 +74,5 @@ When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you must pre
 ## Contributors & attribution
 
 * **Azhonaras (Navid Badami)** — Creator, Lead Architect & Maintainer
+* **Antigravity (UPI)** — Co-author & Verification Assistant (v1.1.0)
 * **Soul Open Source Community** — Contributions, Feedback & Testing
