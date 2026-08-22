@@ -51,8 +51,26 @@ try:
 except (ImportError, Exception):
     HAS_SENTENCE_TRANSFORMERS = False
 
+SOUL_ENGINE_VERSION = "1.1.0"
 CONSTITUTION_VERSION = "0.2"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
+
+import soul_review
+from soul_review import (
+    SoulReviewEngine,
+    sha256_digest,
+    compute_host_payload_hash,
+    compute_host_event_hash,
+    compute_candidate_hash,
+    compute_decision_hash,
+    compute_memory_content_hash,
+    compute_memory_root,
+    compute_system_state_hash,
+    compute_preview_hash,
+    compute_receipt_hash,
+    compute_audit_hash,
+    generate_salt
+)
 
 # ------------------------------------------------------------------------------
 # CONSTITUTIONAL TRAIT BOUNDS (Section 5)
@@ -290,6 +308,7 @@ class SoulKernel:
         self.vector_engine = VectorEmbeddingEngine()
         self.nli_engine = NLIVerifierEngine()
         self.bio_engine = BioHomeostaticRewardEngine()
+        self.review_engine = SoulReviewEngine(self)
 
         self.daemon_worker: Optional[SoulDaemon] = None
 
@@ -302,6 +321,13 @@ class SoulKernel:
 
         self._init_sqlite()
         self._bootstrap_genesis_if_needed()
+
+    def get_constitution_hash(self) -> str:
+        const_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "CONSTITUTION.md")
+        if os.path.exists(const_path):
+            with open(const_path, "rb") as f:
+                return "sha256:" + hashlib.sha256(f.read()).hexdigest()
+        return "sha256:ea0d6cbf7f4d91f2cc2ce806851cf9b11f78a29ad9a79a9226470ebb41d4f40f"
 
     def _get_conn(self) -> sqlite3.Connection:
         if not hasattr(self._local, "conn") or self._local.conn is None:
@@ -385,12 +411,206 @@ class SoulKernel:
                 );
                 """)
 
-                # Initialize FTS5 Table
+                # Alter existing tables if needed for Schema v5
+                def ensure_col(table: str, col_def: str):
+                    cname = col_def.split()[0]
+                    cur.execute(f"PRAGMA table_info({table});")
+                    existing = {row[1] for row in cur.fetchall()}
+                    if cname not in existing:
+                        cur.execute(f"ALTER TABLE {table} ADD COLUMN {col_def};")
+
+                ensure_col("episodes", "session_id TEXT")
+                ensure_col("episodes", "host_event_id TEXT")
+                ensure_col("episodes", "review_cycle_id TEXT")
+                ensure_col("episodes", "content_hash_salt TEXT")
+                ensure_col("episodes", "deleted_at TEXT")
+                ensure_col("episodes", "deletion_receipt_ref TEXT")
+
+                ensure_col("soul_states", "constitution_hash TEXT")
+                ensure_col("soul_states", "prior_state_hash TEXT")
+
+                ensure_col("audit_ledger", "previous_audit_hash TEXT")
+                ensure_col("audit_ledger", "audit_hash TEXT")
+
+                # Schema v5 Review Tables
+                conn.executescript("""
+                CREATE TABLE IF NOT EXISTS host_events (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    user_scope_key TEXT NOT NULL,
+                    project_scope_key TEXT,
+                    sequence INTEGER NOT NULL,
+                    origin_kind TEXT NOT NULL,
+                    event_kind TEXT NOT NULL,
+                    payload_hash TEXT NOT NULL,
+                    payload_hash_salt TEXT,
+                    previous_event_hash TEXT,
+                    event_hash TEXT NOT NULL UNIQUE,
+                    occurred_at TEXT NOT NULL,
+                    consumed_at TEXT,
+                    payload_redacted_at TEXT
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_host_events_session_sequence ON host_events(session_id, sequence);
+                CREATE INDEX IF NOT EXISTS idx_host_events_user_occurred ON host_events(user_scope_key, occurred_at);
+
+                CREATE TABLE IF NOT EXISTS review_cycles (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    user_scope_key TEXT NOT NULL,
+                    project_scope_key TEXT,
+                    status TEXT NOT NULL,
+                    trigger_kind TEXT NOT NULL,
+                    watermark_event_id TEXT NOT NULL,
+                    watermark_sequence INTEGER NOT NULL,
+                    base_soul_state_hash TEXT NOT NULL,
+                    base_memory_set_version INTEGER NOT NULL,
+                    base_memory_root TEXT NOT NULL,
+                    base_system_state_hash TEXT NOT NULL,
+                    provisional INTEGER NOT NULL DEFAULT 0,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    opened_at TEXT NOT NULL,
+                    prepared_at TEXT,
+                    sealed_at TEXT,
+                    invalidated_at TEXT,
+                    preview_json TEXT,
+                    preview_hash TEXT,
+                    preview_hash_salt TEXT,
+                    preview_created_at TEXT,
+                    preview_redacted_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_review_cycles_session_status ON review_cycles(session_id, status);
+                CREATE INDEX IF NOT EXISTS idx_review_cycles_user_opened ON review_cycles(user_scope_key, opened_at);
+
+                CREATE TABLE IF NOT EXISTS memory_candidates (
+                    id TEXT PRIMARY KEY,
+                    user_scope_key TEXT NOT NULL,
+                    cycle_id TEXT NOT NULL,
+                    candidate_type TEXT NOT NULL,
+                    canonical_text TEXT,
+                    original_provenance TEXT NOT NULL,
+                    source_episode_refs_json TEXT NOT NULL,
+                    source_host_event_refs_json TEXT NOT NULL,
+                    supporting_refs_json TEXT NOT NULL,
+                    contradicting_refs_json TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    sensitivity TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    status TEXT NOT NULL,
+                    candidate_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    revises_candidate_id TEXT,
+                    created_from_human_event_ref TEXT,
+                    candidate_hash_salt TEXT,
+                    payload_redacted_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_candidates_cycle_status ON memory_candidates(cycle_id, status);
+                CREATE INDEX IF NOT EXISTS idx_candidates_user_type ON memory_candidates(user_scope_key, candidate_type);
+
+                CREATE TABLE IF NOT EXISTS review_decisions (
+                    id TEXT PRIMARY KEY,
+                    user_scope_key TEXT NOT NULL,
+                    cycle_id TEXT NOT NULL,
+                    candidate_id TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    human_event_ref TEXT NOT NULL,
+                    decision_hash TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    decided_at TEXT NOT NULL,
+                    result_candidate_id TEXT,
+                    correction_confirmation_event_ref TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_decisions_cycle_candidate ON review_decisions(cycle_id, candidate_id);
+                CREATE INDEX IF NOT EXISTS idx_decisions_human_event ON review_decisions(human_event_ref);
+
+                CREATE TABLE IF NOT EXISTS reviewed_memories (
+                    id TEXT PRIMARY KEY,
+                    canonical_text TEXT,
+                    memory_type TEXT NOT NULL,
+                    provenance TEXT NOT NULL,
+                    retention_state TEXT NOT NULL DEFAULT 'accessible',
+                    scope TEXT NOT NULL,
+                    owner_user_scope_key TEXT NOT NULL,
+                    scope_key TEXT NOT NULL,
+                    source_episode_refs_json TEXT NOT NULL,
+                    review_decision_ref TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    supersedes_memory_id TEXT,
+                    content_hash_salt TEXT,
+                    deleted_at TEXT,
+                    deletion_receipt_ref TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_reviewed_memories_owner_retention ON reviewed_memories(owner_user_scope_key, retention_state);
+                CREATE INDEX IF NOT EXISTS idx_reviewed_memories_scope ON reviewed_memories(scope, scope_key);
+
+                CREATE TABLE IF NOT EXISTS memory_set_versions (
+                    version INTEGER NOT NULL,
+                    owner_user_scope_key TEXT NOT NULL,
+                    prior_version INTEGER,
+                    prior_memory_root TEXT,
+                    memory_root TEXT NOT NULL,
+                    cycle_id TEXT,
+                    receipt_ref TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (owner_user_scope_key, version)
+                );
+                CREATE INDEX IF NOT EXISTS idx_memory_set_versions_owner ON memory_set_versions(owner_user_scope_key, version DESC);
+
+                CREATE TABLE IF NOT EXISTS memory_set_members (
+                    owner_user_scope_key TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    memory_id TEXT NOT NULL,
+                    memory_content_hash TEXT NOT NULL,
+                    PRIMARY KEY (owner_user_scope_key, version, memory_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_memory_set_members_memory ON memory_set_members(memory_id);
+
+                CREATE TABLE IF NOT EXISTS memory_change_receipts (
+                    id TEXT PRIMARY KEY,
+                    previous_receipt_hash TEXT,
+                    owner_user_scope_key TEXT NOT NULL,
+                    operation_kind TEXT NOT NULL,
+                    cycle_id TEXT,
+                    operation_hash TEXT NOT NULL,
+                    preview_hash TEXT,
+                    authority_event_hash TEXT NOT NULL,
+                    constitution_hash TEXT NOT NULL,
+                    watermark_event_id TEXT,
+                    watermark_sequence INTEGER,
+                    prior_soul_state_hash TEXT NOT NULL,
+                    result_soul_state_hash TEXT NOT NULL,
+                    prior_memory_set_version INTEGER NOT NULL,
+                    result_memory_set_version INTEGER NOT NULL,
+                    prior_memory_root TEXT NOT NULL,
+                    result_memory_root TEXT NOT NULL,
+                    prior_system_state_hash TEXT NOT NULL,
+                    result_system_state_hash TEXT NOT NULL,
+                    rollback_reference TEXT NOT NULL,
+                    affected_memory_ids_json TEXT NOT NULL,
+                    candidate_decision_summary_json TEXT NOT NULL,
+                    receipt_hash TEXT NOT NULL UNIQUE,
+                    committed_at TEXT NOT NULL,
+                    cleanup_state TEXT NOT NULL DEFAULT 'not_required',
+                    cleanup_completed_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_receipts_owner_committed ON memory_change_receipts(owner_user_scope_key, committed_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_receipts_cycle ON memory_change_receipts(cycle_id);
+                """)
+
+                # Initialize FTS5 Tables
                 try:
                     conn.execute("""
                     CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(
                         content,
                         episode_id UNINDEXED,
+                        tokenize='unicode61'
+                    );
+                    """)
+                    conn.execute("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS reviewed_memories_fts USING fts5(
+                        canonical_text,
+                        memory_id UNINDEXED,
                         tokenize='unicode61'
                     );
                     """)
@@ -413,20 +633,26 @@ class SoulKernel:
 
                 raw_payload = f"1|{CONSTITUTION_VERSION}|{traits_json}|{narrative}|{tensions_json}|{created_at}"
                 state_hash = hashlib.sha256(raw_payload.encode()).hexdigest()
+                const_hash = self.get_constitution_hash()
 
                 cur.execute("""
-                INSERT INTO soul_states (version, constitution_version, traits_json, narrative, unresolved_tensions_json, state_hash, created_at)
-                VALUES (1, ?, ?, ?, ?, ?, ?);
-                """, (CONSTITUTION_VERSION, traits_json, narrative, tensions_json, state_hash, created_at))
+                INSERT INTO soul_states (version, constitution_version, traits_json, narrative, unresolved_tensions_json, state_hash, created_at, constitution_hash, prior_state_hash)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, NULL);
+                """, (CONSTITUTION_VERSION, traits_json, narrative, tensions_json, state_hash, created_at, const_hash))
 
                 self._record_audit(conn, 1, "genesis_bootstrap", {"traits": DEFAULT_TRAITS}, state_hash)
                 conn.commit()
 
     def _record_audit(self, conn: sqlite3.Connection, version: int, action_type: str, payload: dict, state_hash: str):
-        """Append an immutable audit entry with atomic transaction guarantees."""
+        """Append an immutable audit entry with atomic transaction guarantees and hash chain."""
         audit_id = f"audit_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         payload_str = json.dumps(payload)
+
+        cur = conn.cursor()
+        cur.execute("SELECT audit_hash FROM audit_ledger ORDER BY timestamp DESC LIMIT 1;")
+        prev_row = cur.fetchone()
+        prev_audit_hash = prev_row[0] if (prev_row and prev_row[0]) else None
 
         prov_checksum = state_hash
         if self.prov_mgr:
@@ -436,10 +662,20 @@ class SoulKernel:
             except Exception:
                 prov_checksum = state_hash
 
+        audit_h = compute_audit_hash(
+            previous_audit_hash=prev_audit_hash,
+            audit_id=audit_id,
+            soul_version=version,
+            action_type=action_type,
+            payload_json=payload_str,
+            prov_checksum=prov_checksum,
+            timestamp=timestamp
+        )
+
         conn.execute("""
-        INSERT INTO audit_ledger (id, soul_version, action_type, payload_json, prov_checksum, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """, (audit_id, version, action_type, payload_str, prov_checksum, timestamp))
+        INSERT INTO audit_ledger (id, soul_version, action_type, payload_json, prov_checksum, timestamp, previous_audit_hash, audit_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        """, (audit_id, version, action_type, payload_str, prov_checksum, timestamp, prev_audit_hash, audit_h))
 
     # --------------------------------------------------------------------------
     # MODULE 1 & 2: Policy Gate & Experience Ingestor
@@ -504,7 +740,7 @@ class SoulKernel:
             content, provenance, entity_key = target[0], target[1], target[2]
 
         # Stage 1: Candidate pre-filter (Top-5 via hybrid search)
-        candidates = self.recall_memories(query=content, limit=5, search_mode="dense")
+        candidates = self.recall_memories(query=content, limit=5, search_mode="dense", include_quarantined=True)
 
         corroborating = []
         contradicting = []
@@ -573,34 +809,69 @@ class SoulKernel:
         }
 
     # --------------------------------------------------------------------------
-    # RETRIEVAL API: OVER-FETCHED RECIPROCAL RANK FUSION (RRF)
+    # RETRIEVAL API: OVER-FETCHED RECIPROCAL RANK FUSION (RRF) & QUARANTINE ISOLATION
     # --------------------------------------------------------------------------
-    def recall_memories(self, query: str = "", limit: int = 5, search_mode: str = "rrf_hybrid") -> List[dict]:
+    def recall_memories(
+        self,
+        query: str = "",
+        limit: int = 5,
+        search_mode: str = "rrf_hybrid",
+        user_scope_key: str = "default_user",
+        include_quarantined: bool = False
+    ) -> List[dict]:
         with self._get_conn() as conn:
             cur = conn.cursor()
+            # 1. Check for active reviewed memories
             cur.execute("""
-            SELECT id, source_kind, provenance, content, entity_key, trust_state, embedding_json, created_at
-            FROM episodes WHERE trust_state NOT IN ('superseded', 'contradicted')
-            ORDER BY created_at DESC;
-            """)
-            rows = cur.fetchall()
+            SELECT m.id, 'reviewed' as source_kind, m.provenance, m.canonical_text, m.scope_key, 'active' as trust_state, m.created_at
+            FROM memory_set_members mem
+            JOIN reviewed_memories m ON mem.memory_id = m.id
+            JOIN memory_set_versions v ON mem.owner_user_scope_key = v.owner_user_scope_key AND mem.version = v.version
+            WHERE mem.owner_user_scope_key = ? AND m.retention_state = 'accessible'
+              AND v.version = (SELECT MAX(v2.version) FROM memory_set_versions v2 WHERE v2.owner_user_scope_key = ?)
+            ORDER BY m.created_at DESC;
+            """, (user_scope_key, user_scope_key))
+            rev_rows = cur.fetchall()
 
-        if not rows:
+            if not include_quarantined:
+                doc_list = [
+                    {
+                        "memory_id": r[0],
+                        "source_kind": r[1],
+                        "provenance": r[2],
+                        "content": r[3],
+                        "scope_key": r[4],
+                        "trust_state": r[5],
+                        "embedding": None,
+                        "created_at": r[6]
+                    }
+                    for r in rev_rows
+                ]
+            else:
+                cur.execute("""
+                SELECT id, source_kind, provenance, content, entity_key, trust_state, embedding_json, created_at
+                FROM episodes WHERE trust_state NOT IN ('superseded', 'contradicted') AND deleted_at IS NULL
+                ORDER BY created_at DESC;
+                """)
+                rows = cur.fetchall()
+                if not rows:
+                    return []
+                doc_list = [
+                    {
+                        "episode_id": r[0],
+                        "source_kind": r[1],
+                        "provenance": r[2],
+                        "content": r[3],
+                        "entity_key": r[4],
+                        "trust_state": r[5],
+                        "embedding": json.loads(r[6]) if r[6] else None,
+                        "created_at": r[7]
+                    }
+                    for r in rows
+                ]
+
+        if not doc_list:
             return []
-
-        doc_list = [
-            {
-                "episode_id": r[0],
-                "source_kind": r[1],
-                "provenance": r[2],
-                "content": r[3],
-                "entity_key": r[4],
-                "trust_state": r[5],
-                "embedding": json.loads(r[6]) if r[6] else None,
-                "created_at": r[7]
-            }
-            for r in rows
-        ]
 
         if not query:
             return doc_list[:limit]
@@ -609,7 +880,7 @@ class SoulKernel:
         query_vec = self.vector_engine.embed(query)
         dense_scored = []
         for d in doc_list:
-            d_vec = d["embedding"] or self.vector_engine.embed(d["content"])
+            d_vec = d.get("embedding") or self.vector_engine.embed(d["content"])
             sim = self.vector_engine.cosine_similarity(query_vec, d_vec)
             dense_scored.append((d, sim))
         dense_ranked = [d[0] for d in sorted(dense_scored, key=lambda x: x[1], reverse=True)[:100]]
@@ -621,18 +892,21 @@ class SoulKernel:
                 cur = conn.cursor()
                 clean_q = re.sub(r"[^\w\s]", "", query).strip()
                 if clean_q:
-                    cur.execute("""
-                    SELECT episode_id, bm25(episodes_fts) FROM episodes_fts
-                    WHERE episodes_fts MATCH ? ORDER BY rank LIMIT 100;
+                    fts_table = "reviewed_memories_fts" if (rev_rows and not include_quarantined) else "episodes_fts"
+                    id_col = "memory_id" if (rev_rows and not include_quarantined) else "episode_id"
+                    cur.execute(f"""
+                    SELECT {id_col}, bm25({fts_table}) FROM {fts_table}
+                    WHERE {fts_table} MATCH ? ORDER BY rank LIMIT 100;
                     """, (clean_q,))
                     fts_hits = {r[0]: r[1] for r in cur.fetchall()}
-                    doc_map = {d["episode_id"]: d for d in doc_list}
-                    fts_ranked = [doc_map[eid] for eid in fts_hits if eid in doc_map]
+                    key_fn = (lambda x: x.get("memory_id") or x.get("episode_id"))
+                    doc_map = {key_fn(d): d for d in doc_list}
+                    fts_ranked = [doc_map[k] for k in fts_hits if k in doc_map]
         except Exception:
             fts_ranked = []
 
         if not fts_ranked:
-            # Fallback simple lexical matching if FTS5 query was empty
+            # Fallback simple lexical matching
             query_tokens = set(re.findall(r"\w+", query.lower()))
             lex_scored = []
             for d in doc_list:
@@ -649,16 +923,441 @@ class SoulKernel:
         # 3. Standardized Reciprocal Rank Fusion (Candidate Union Pool C)
         k = 60.0
         rrf_scores: Dict[str, float] = {}
+        key_fn = (lambda x: x.get("memory_id") or x.get("episode_id"))
 
         for rank, d in enumerate(dense_ranked):
-            rrf_scores[d["episode_id"]] = rrf_scores.get(d["episode_id"], 0.0) + (0.6 / (k + rank + 1.0))
+            item_key = key_fn(d)
+            rrf_scores[item_key] = rrf_scores.get(item_key, 0.0) + (0.6 / (k + rank + 1.0))
 
         for rank, d in enumerate(fts_ranked):
-            rrf_scores[d["episode_id"]] = rrf_scores.get(d["episode_id"], 0.0) + (0.4 / (k + rank + 1.0))
+            item_key = key_fn(d)
+            rrf_scores[item_key] = rrf_scores.get(item_key, 0.0) + (0.4 / (k + rank + 1.0))
 
-        doc_lookup = {d["episode_id"]: d for d in doc_list}
+        doc_lookup = {key_fn(d): d for d in doc_list}
         sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
         return [doc_lookup[eid] for eid in sorted_ids if eid in doc_lookup][:limit]
+
+    # --------------------------------------------------------------------------
+    # SOUL REVIEW CYCLE WORKFLOW METHODS
+    # --------------------------------------------------------------------------
+    def record_host_event(
+        self,
+        session_id: str,
+        user_scope_key: str = "default_user",
+        project_scope_key: Optional[str] = None,
+        origin_kind: str = "human",
+        event_kind: str = "conversation",
+        payload: Any = ""
+    ) -> Any:
+        return self.review_engine.record_host_event(
+            session_id=session_id,
+            user_scope_key=user_scope_key,
+            project_scope_key=project_scope_key,
+            origin_kind=origin_kind,
+            event_kind=event_kind,
+            payload=payload
+        )
+
+    def start_review_cycle(
+        self,
+        session_id: str,
+        user_scope_key: str = "default_user",
+        project_scope_key: Optional[str] = None,
+        trigger_kind: str = "explicit",
+        provisional: bool = False,
+        idempotency_key: Optional[str] = None
+    ) -> dict:
+        cycle = self.review_engine.open_or_get_cycle(
+            session_id=session_id,
+            user_scope_key=user_scope_key,
+            project_scope_key=project_scope_key,
+            trigger_kind=trigger_kind,
+            provisional=provisional,
+            idempotency_key=idempotency_key
+        )
+        candidates = self.review_engine.extract_candidates_from_episodes(
+            cycle_id=cycle.id,
+            user_scope_key=user_scope_key
+        )
+        cand_dicts = [asdict(c) for c in candidates]
+        return {
+            "cycle_id": cycle.id,
+            "status": cycle.status,
+            "stage": cycle.status,
+            "trigger_kind": cycle.trigger_kind,
+            "watermark_sequence": cycle.watermark_sequence,
+            "base_memory_set_version": cycle.base_memory_set_version,
+            "candidate_count": len(candidates),
+            "candidates": cand_dicts
+        }
+
+    def get_review_status(self, session_id: str) -> Optional[dict]:
+        with self._get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+            SELECT id, status, watermark_sequence, base_memory_set_version, preview_hash
+            FROM review_cycles WHERE session_id = ?
+            ORDER BY opened_at DESC LIMIT 1;
+            """, (session_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            cycle_id, status, watermark_seq, base_mem_ver, preview_hash = row
+            pending = self.review_engine.get_pending_candidates(cycle_id)
+            cand_dicts = [asdict(c) for c in pending]
+            return {
+                "cycle_id": cycle_id,
+                "status": status,
+                "stage": status,
+                "watermark_sequence": watermark_seq,
+                "base_memory_set_version": base_mem_ver,
+                "preview_hash": preview_hash,
+                "candidate_count": len(pending),
+                "candidates": cand_dicts,
+                "pending_candidates_count": len(pending),
+                "pending_candidates": cand_dicts
+            }
+
+    def record_review_decision(
+        self,
+        cycle_id: str,
+        candidate_id: str,
+        decision: str,
+        human_event_ref: str,
+        user_scope_key: str = "default_user",
+        corrected_text: Optional[str] = None,
+        correction_confirmation_event_ref: Optional[str] = None
+    ) -> dict:
+        dec = self.review_engine.record_human_decision(
+            cycle_id=cycle_id,
+            candidate_id=candidate_id,
+            decision=decision,
+            human_event_ref=human_event_ref,
+            user_scope_key=user_scope_key,
+            corrected_text=corrected_text,
+            correction_confirmation_event_ref=correction_confirmation_event_ref
+        )
+        return asdict(dec)
+
+    def preview_review_cycle(self, cycle_id: str) -> dict:
+        return self.review_engine.generate_cycle_preview(cycle_id=cycle_id)
+
+    def commit_review_cycle(self, cycle_id: str, commit_human_event_ref: str) -> dict:
+        return self.review_engine.commit_review_cycle(
+            cycle_id=cycle_id,
+            commit_human_event_ref=commit_human_event_ref
+        )
+
+    def recover_unsealed_cycles(self, user_scope_key: Optional[str] = None) -> List[str]:
+        return self.review_engine.recover_unsealed_cycles(user_scope_key=user_scope_key)
+
+    def invalidate_provisional_cycle(self, cycle_id: str) -> dict:
+        return self.review_engine.invalidate_provisional_cycle(cycle_id=cycle_id)
+
+    def list_active_reviewed_memories(
+        self,
+        user_scope_key: str = "default_user",
+        project_scope_key: Optional[str] = None
+    ) -> List[dict]:
+        return self.review_engine.list_active_reviewed_memories(
+            user_scope_key=user_scope_key,
+            project_scope_key=project_scope_key
+        )
+
+    def rollback_reviewed_memory_set(
+        self,
+        target_version: int,
+        human_event_ref: str,
+        user_scope_key: str = "default_user"
+    ) -> dict:
+        """
+        Rollback active memory set to a prior version (Forward-Only Rollback).
+        Creates a new version pointing to target_version members and emits a cryptographic receipt.
+        """
+        with self._lock, self._get_conn() as conn:
+            cur = conn.cursor()
+            # Verify human authority
+            cur.execute("SELECT origin_kind, event_hash FROM host_events WHERE id = ?;", (human_event_ref,))
+            ev_row = cur.fetchone()
+            if not ev_row or ev_row[0] != "human":
+                raise PermissionError("Rollback requires human host event authority")
+            auth_event_hash = ev_row[1]
+
+            # Get target version members
+            cur.execute("""
+            SELECT memory_id, memory_content_hash
+            FROM memory_set_members
+            WHERE owner_user_scope_key = ? AND version = ?;
+            """, (user_scope_key, target_version))
+            target_members = cur.fetchall()
+            if not target_members and target_version != 0:
+                raise ValueError(f"Target memory set version {target_version} does not exist")
+
+            # Get current latest version
+            cur.execute("""
+            SELECT version, memory_root FROM memory_set_versions
+            WHERE owner_user_scope_key = ? ORDER BY version DESC LIMIT 1;
+            """, (user_scope_key,))
+            latest = cur.fetchone()
+            current_ver = latest[0] if latest else 0
+            prior_mem_root = latest[1] if latest else compute_memory_root(user_scope_key, [])
+
+            cur.execute("SELECT state_hash FROM soul_states ORDER BY version DESC LIMIT 1;")
+            s_row = cur.fetchone()
+            soul_state_hash = s_row[0] if s_row else "sha256:0"
+            const_hash = self.get_constitution_hash()
+            prior_sys_hash = compute_system_state_hash(soul_state_hash, prior_mem_root, const_hash)
+
+            new_ver = current_ver + 1
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            member_dicts = [{"memory_id": m[0], "memory_content_hash": m[1]} for m in target_members]
+            new_mem_root = compute_memory_root(user_scope_key, member_dicts)
+            new_sys_hash = compute_system_state_hash(soul_state_hash, new_mem_root, const_hash)
+
+            receipt_id = f"rcpt_roll_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
+            cur.execute("SELECT receipt_hash FROM memory_change_receipts WHERE owner_user_scope_key = ? ORDER BY committed_at DESC LIMIT 1;", (user_scope_key,))
+            prev_rcpt = cur.fetchone()
+            prev_rcpt_hash = prev_rcpt[0] if prev_rcpt else None
+
+            op_hash = sha256_digest({"action": "rollback", "target_version": target_version})
+            receipt_hash = compute_receipt_hash(
+                previous_receipt_hash=prev_rcpt_hash,
+                owner_user_scope_key=user_scope_key,
+                operation_kind="rollback",
+                cycle_id=None,
+                operation_hash=op_hash,
+                preview_hash=None,
+                authority_event_hash=auth_event_hash,
+                constitution_hash=const_hash,
+                watermark_event_id=None,
+                watermark_sequence=None,
+                prior_soul_state_hash=soul_state_hash,
+                result_soul_state_hash=soul_state_hash,
+                prior_memory_set_version=current_ver,
+                result_memory_set_version=new_ver,
+                prior_memory_root=prior_mem_root,
+                result_memory_root=new_mem_root,
+                prior_system_state_hash=prior_sys_hash,
+                result_system_state_hash=new_sys_hash,
+                rollback_reference=str(target_version),
+                affected_memory_ids=[m[0] for m in target_members],
+                candidate_decision_summary={"target_version": target_version},
+                committed_at=now_iso
+            )
+
+            conn.execute("BEGIN IMMEDIATE;")
+            cur.execute("""
+            INSERT INTO memory_change_receipts (
+                id, previous_receipt_hash, owner_user_scope_key, operation_kind,
+                cycle_id, operation_hash, preview_hash, authority_event_hash,
+                constitution_hash, watermark_event_id, watermark_sequence,
+                prior_soul_state_hash, result_soul_state_hash,
+                prior_memory_set_version, result_memory_set_version,
+                prior_memory_root, result_memory_root,
+                prior_system_state_hash, result_system_state_hash,
+                rollback_reference, affected_memory_ids_json,
+                candidate_decision_summary_json, receipt_hash, committed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
+                receipt_id, prev_rcpt_hash, user_scope_key, "rollback",
+                None, op_hash, None, auth_event_hash,
+                const_hash, None, None,
+                soul_state_hash, soul_state_hash,
+                current_ver, new_ver,
+                prior_mem_root, new_mem_root,
+                prior_sys_hash, new_sys_hash,
+                str(target_version), json.dumps([m[0] for m in target_members]),
+                json.dumps({"target_version": target_version}), receipt_hash, now_iso
+            ))
+
+            cur.execute("""
+            INSERT INTO memory_set_versions (
+                version, owner_user_scope_key, prior_version, prior_memory_root,
+                memory_root, cycle_id, receipt_ref, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """, (new_ver, user_scope_key, current_ver, prior_mem_root, new_mem_root, None, receipt_id, now_iso))
+
+            for m in target_members:
+                cur.execute("""
+                INSERT INTO memory_set_members (owner_user_scope_key, version, memory_id, memory_content_hash)
+                VALUES (?, ?, ?, ?);
+                """, (user_scope_key, new_ver, m[0], m[1]))
+
+            conn.commit()
+
+        return {
+            "status": "rolled_back",
+            "new_version": new_ver,
+            "target_version": target_version,
+            "memory_root": new_mem_root,
+            "receipt_id": receipt_id,
+            "receipt_hash": receipt_hash
+        }
+
+    def delete_reviewed_memory(
+        self,
+        memory_id: str,
+        human_event_ref: str,
+        user_scope_key: str = "default_user"
+    ) -> dict:
+        """
+        Delete a reviewed memory under Salted Privacy Deletion Cascade (Section 13).
+        - Redacts canonical_text to NULL
+        - Cascades redaction to source episodes and candidates
+        - Increments memory_set_versions excluding the memory
+        - Emits cryptographic deletion receipt
+        """
+        with self._lock, self._get_conn() as conn:
+            cur = conn.cursor()
+            # Verify human authority
+            cur.execute("SELECT origin_kind, event_hash FROM host_events WHERE id = ?;", (human_event_ref,))
+            ev_row = cur.fetchone()
+            if not ev_row or ev_row[0] != "human":
+                raise PermissionError("Deletion requires human host event authority")
+            auth_event_hash = ev_row[1]
+
+            # Fetch memory
+            cur.execute("""
+            SELECT source_episode_refs_json, content_hash
+            FROM reviewed_memories
+            WHERE id = ? AND owner_user_scope_key = ?;
+            """, (memory_id, user_scope_key))
+            mem_row = cur.fetchone()
+            if not mem_row:
+                raise ValueError(f"Memory {memory_id} not found")
+
+            source_eps = json.loads(mem_row[0]) if mem_row[0] else []
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            receipt_id = f"rcpt_del_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
+
+            # Get current latest version
+            cur.execute("""
+            SELECT version, memory_root FROM memory_set_versions
+            WHERE owner_user_scope_key = ? ORDER BY version DESC LIMIT 1;
+            """, (user_scope_key,))
+            latest = cur.fetchone()
+            current_ver = latest[0] if latest else 0
+            prior_mem_root = latest[1] if latest else compute_memory_root(user_scope_key, [])
+
+            # Active members minus memory_id
+            cur.execute("""
+            SELECT memory_id, memory_content_hash
+            FROM memory_set_members
+            WHERE owner_user_scope_key = ? AND version = ? AND memory_id != ?;
+            """, (user_scope_key, current_ver, memory_id))
+            remaining_members = cur.fetchall()
+
+            new_ver = current_ver + 1
+            member_dicts = [{"memory_id": m[0], "memory_content_hash": m[1]} for m in remaining_members]
+            new_mem_root = compute_memory_root(user_scope_key, member_dicts)
+
+            cur.execute("SELECT state_hash FROM soul_states ORDER BY version DESC LIMIT 1;")
+            s_row = cur.fetchone()
+            soul_state_hash = s_row[0] if s_row else "sha256:0"
+            const_hash = self.get_constitution_hash()
+            prior_sys_hash = compute_system_state_hash(soul_state_hash, prior_mem_root, const_hash)
+            new_sys_hash = compute_system_state_hash(soul_state_hash, new_mem_root, const_hash)
+
+            cur.execute("SELECT receipt_hash FROM memory_change_receipts WHERE owner_user_scope_key = ? ORDER BY committed_at DESC LIMIT 1;", (user_scope_key,))
+            prev_rcpt = cur.fetchone()
+            prev_rcpt_hash = prev_rcpt[0] if prev_rcpt else None
+
+            op_hash = sha256_digest({"action": "delete", "memory_id": memory_id})
+            receipt_hash = compute_receipt_hash(
+                previous_receipt_hash=prev_rcpt_hash,
+                owner_user_scope_key=user_scope_key,
+                operation_kind="deletion",
+                cycle_id=None,
+                operation_hash=op_hash,
+                preview_hash=None,
+                authority_event_hash=auth_event_hash,
+                constitution_hash=const_hash,
+                watermark_event_id=None,
+                watermark_sequence=None,
+                prior_soul_state_hash=soul_state_hash,
+                result_soul_state_hash=soul_state_hash,
+                prior_memory_set_version=current_ver,
+                result_memory_set_version=new_ver,
+                prior_memory_root=prior_mem_root,
+                result_memory_root=new_mem_root,
+                prior_system_state_hash=prior_sys_hash,
+                result_system_state_hash=new_sys_hash,
+                rollback_reference=str(current_ver),
+                affected_memory_ids=[memory_id],
+                candidate_decision_summary={"deleted_memory_id": memory_id},
+                committed_at=now_iso
+            )
+
+            conn.execute("BEGIN IMMEDIATE;")
+            # 1. Redact reviewed memory and erase salt (GDPR Salted Erasure Section 7.2)
+            cur.execute("""
+            UPDATE reviewed_memories
+            SET canonical_text = '[REDACTED]',
+                content_hash_salt = NULL,
+                retention_state = 'deleted',
+                deleted_at = ?,
+                deletion_receipt_ref = ?
+            WHERE id = ?;
+            """, (now_iso, receipt_id, memory_id))
+
+            # 2. Redact source episodes
+            for ep_id in source_eps:
+                cur.execute("""
+                UPDATE episodes
+                SET content = '[REDACTED]',
+                    deleted_at = ?,
+                    deletion_receipt_ref = ?
+                WHERE id = ?;
+                """, (now_iso, receipt_id, ep_id))
+
+            # 3. Insert receipt
+            cur.execute("""
+            INSERT INTO memory_change_receipts (
+                id, previous_receipt_hash, owner_user_scope_key, operation_kind,
+                cycle_id, operation_hash, preview_hash, authority_event_hash,
+                constitution_hash, watermark_event_id, watermark_sequence,
+                prior_soul_state_hash, result_soul_state_hash,
+                prior_memory_set_version, result_memory_set_version,
+                prior_memory_root, result_memory_root,
+                prior_system_state_hash, result_system_state_hash,
+                rollback_reference, affected_memory_ids_json,
+                candidate_decision_summary_json, receipt_hash, committed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
+                receipt_id, prev_rcpt_hash, user_scope_key, "deletion",
+                None, op_hash, None, auth_event_hash,
+                const_hash, None, None,
+                soul_state_hash, soul_state_hash,
+                current_ver, new_ver,
+                prior_mem_root, new_mem_root,
+                prior_sys_hash, new_sys_hash,
+                str(current_ver), json.dumps([memory_id]),
+                json.dumps({"deleted_memory_id": memory_id}), receipt_hash, now_iso
+            ))
+
+            # 4. Insert memory set version & members
+            cur.execute("""
+            INSERT INTO memory_set_versions (
+                version, owner_user_scope_key, prior_version, prior_memory_root,
+                memory_root, cycle_id, receipt_ref, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """, (new_ver, user_scope_key, current_ver, prior_mem_root, new_mem_root, None, receipt_id, now_iso))
+
+            for m in remaining_members:
+                cur.execute("""
+                INSERT INTO memory_set_members (owner_user_scope_key, version, memory_id, memory_content_hash)
+                VALUES (?, ?, ?, ?);
+                """, (user_scope_key, new_ver, m[0], m[1]))
+
+            conn.commit()
+
+        return {
+            "status": "deleted",
+            "memory_id": memory_id,
+            "new_version": new_ver,
+            "receipt_id": receipt_id,
+            "receipt_hash": receipt_hash
+        }
 
     # --------------------------------------------------------------------------
     # MODULE 4 & 5: Reflection & Dream Sandbox
@@ -915,6 +1614,10 @@ class SoulKernel:
             },
             "active_facts": memories
         }
+
+    def get_identity_digest(self, limit: int = 5) -> dict:
+        """Alias for get_memory_digest per soul-review-cycle specification."""
+        return self.get_memory_digest(limit=limit)
 
     # --------------------------------------------------------------------------
     # BACKGROUND DAEMON LIFECYCLE

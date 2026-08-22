@@ -140,7 +140,7 @@ class TestSoulKernel(unittest.TestCase):
         self.kernel.ingest_experience(EpisodeInput(source_kind="human", content="Distributed microservices architecture in Go"))
         self.kernel.ingest_experience(EpisodeInput(source_kind="human", content="Machine learning models and neural networks"))
 
-        results = self.kernel.recall_memories(query="Golang backend microservices", limit=1, search_mode="rrf_hybrid")
+        results = self.kernel.recall_memories(query="Golang backend microservices", limit=1, search_mode="rrf_hybrid", include_quarantined=True)
         self.assertEqual(len(results), 1)
         self.assertIn("Go", results[0]["content"])
 
@@ -244,7 +244,7 @@ class TestSoulKernel(unittest.TestCase):
         for t in threads:
             t.join()
 
-        mems = self.kernel.recall_memories(limit=100)
+        mems = self.kernel.recall_memories(limit=100, include_quarantined=True)
         self.assertGreaterEqual(len(mems), 20)
 
 

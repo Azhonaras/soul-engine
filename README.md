@@ -1,10 +1,11 @@
-# Soul Engine (v1.0.0)
+# Soul Engine (v1.1.0)
 ### *A Cognitive Identity and Epistemic Memory Kernel for Autonomous AI Agents*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](SECURITY.md)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Protocol: Model Context Protocol](https://img.shields.io/badge/Protocol-MCP%20Standard-green.svg)](https://modelcontextprotocol.io/)
-[![CI Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
+[![MCP-Evals: 100% Passed](https://img.shields.io/badge/MCP--Evals-100%25%20Verified-brightgreen.svg)](EVAL_REPORT.md)
 [![Tests: ISO/IEC 29119](https://img.shields.io/badge/Tests-100%25%20Verified-success.svg)](tests/)
 
 Soul Engine is a local cognitive kernel for AI agents. It addresses three common limitations in agent systems: session amnesia, vulnerability to adversarial memory poisoning (gaslighting), and behavioral drift.
