@@ -21,38 +21,45 @@ This system studies machine consciousness as a hypothesis. It does not treat flu
 
 ```mermaid
 flowchart TD
-    %% 1. Ingestion Layer
-    A["External Actors: Humans / Agents / Env"] --> G["Interaction Gateway"]
-    G --> P["Consent & Policy Gate"]
-    P --> E["Experience Ingestor"]
-    E --> Q[("Quarantine Memory")]
+    subgraph ingest["Ingestion"]
+        actors["External actors"] --> gateway["Interaction gateway"]
+        gateway --> policy["Consent and policy"]
+        policy --> experience["Experience ingest"]
+        experience --> quarantine[("Quarantine")]
+    end
 
-    %% 2. Cognition & Verification Layer
-    Q --> V["Evidence Verifier"]
-    Q -.->|unverified context| R["Reflection Engine"]
-    V --> R
-    R -.->|consequential uncertainty| D["Dream Sandbox"]
-    D -.->|imagined proposals| O["Soul Orchestrator"]
-    R --> O
+    subgraph cognition["Cognition"]
+        verifier["Evidence verifier"] --> reflector["Reflection"]
+        reflector -.->|"uncertain"| dream["Dream sandbox"]
+        dream -.->|"imagined"| orchestrator["Soul orchestrator"]
+        reflector --> orchestrator
+    end
 
-    %% 3. Governance & Review Layer
-    C["Constitution Engine"] --> P
-    C --> O
-    C --> H["Self-Healing Engine"]
-    U["Authorized Human Reviewer"] --> REV["Soul Review Cycle Subsystem"]
-    REV --> O
+    quarantine --> verifier
+    quarantine -.->|"unverified"| reflector
 
-    %% 4. Persistence & Audit Layer
-    O --> S[("Versioned Soul State")]
-    S --> H
-    H --> O
-    S -.->|snapshot| L[("Audit & Snapshot Ledger")]
-    REV --> RM[("reviewed_memories (long-term)")]
-    REV --> S
-    REV --> L
-    S --> NM[("neuromodulators")]
-    NM -.-> L
-    RM --> L
+    subgraph governance["Governance"]
+        reviewer["Human reviewer"] --> reviewCycle["Review cycle"]
+        constitution["Constitution"] --> healer["Self-healing"]
+    end
+
+    constitution --> policy
+    constitution --> orchestrator
+    reviewCycle --> orchestrator
+    healer --> orchestrator
+
+    subgraph persist["Persistence"]
+        soulState[("Soul state")] --> neuromod[("neuromodulators")]
+        neuromod -.-> ledger[("Audit ledger")]
+        reviewed[("reviewed_memories")] --> ledger
+    end
+
+    orchestrator --> soulState
+    soulState --> healer
+    soulState -.->|"snapshot"| ledger
+    reviewCycle --> reviewed
+    reviewCycle --> soulState
+    reviewCycle --> ledger
 ```
 
 Default `soul_recall` / `soul_digest` read **reviewed_memories**. Quarantine (`episodes`) is not identity until review commit.
@@ -89,26 +96,26 @@ Start as one process plus one relational database (`soul.db` in SQLite WAL mode)
 
 ```mermaid
 flowchart TD
-    I["Receive experience"] --> Q["Create quarantined episode"]
-    Q --> P{"Consent, privacy, retention pass?"}
-    P -->|No| X["Reject, redact, or delete"]
-    P -->|Yes| E["Check evidence and contradictions"]
-    E --> R["Generate competing interpretations"]
-    R --> C{"Consequential or uncertain?"}
-    C -->|Yes| D["Run adversarial Dream simulation"]
-    D --> K["Create interpretation or change proposal"]
-    C -->|No| K
-    K --> B{"Protected component?"}
-    B -->|Yes| A["Request authorized human approval"]
-    A -->|Denied| N["Reject / No soul change"]
-    A -->|Approved| W["Create snapshot and commit"]
-    B -->|No| T{"Within trait and rate bounds?"}
-    T -->|No| N
-    T -->|Yes| W
-    W --> O["Observe effects in production"]
-    O --> H{"Health regression detected?"}
-    H -->|No| Z["Retain stable version"]
-    H -->|Yes| S["Trigger self-healing loop"]
+    receive["Receive experience"] --> episode["Create quarantined episode"]
+    episode --> consent{"Consent passed?"}
+    consent -->|No| reject["Reject or redact"]
+    consent -->|Yes| evidence["Check evidence"]
+    evidence --> interpret["Competing interpretations"]
+    interpret --> uncertain{"Consequential or uncertain?"}
+    uncertain -->|Yes| dream["Adversarial Dream"]
+    dream --> proposal["Change proposal"]
+    uncertain -->|No| proposal
+    proposal --> protected{"Protected component?"}
+    protected -->|Yes| approval["Request human approval"]
+    approval -->|Denied| noChange["No soul change"]
+    approval -->|Approved| commitStep["Snapshot and commit"]
+    protected -->|No| bounds{"Within bounds?"}
+    bounds -->|No| noChange
+    bounds -->|Yes| commitStep
+    commitStep --> observe["Observe in production"]
+    observe --> health{"Health regression?"}
+    health -->|No| retain["Retain stable version"]
+    health -->|Yes| heal["Self-healing loop"]
 ```
 
 Live default recall is `reviewed_memories` after human review commit (sections 4.2 and 9), not this ingest-to-commit sketch.
@@ -146,13 +153,13 @@ Rules:
 ```mermaid
 stateDiagram-v2
     [*] --> Quarantined
-    Quarantined --> Rejected: consent/privacy fail
+    Quarantined --> Rejected: consent or privacy fail
     Quarantined --> Corroborating: eligible for verification
     Corroborating --> Quarantined: insufficient evidence
     Corroborating --> Contradicted: material conflict
     Contradicted --> Corroborating: new independent evidence
     Quarantined --> Promoted: human review commit
-    Promoted --> Superseded: better interpretation/evidence
+    Promoted --> Superseded: better interpretation or evidence
     Promoted --> Restricted: consent or policy changed
     Restricted --> Deleted: valid deletion cascade
     Quarantined --> Deleted: expiry or deletion request
@@ -233,27 +240,27 @@ Dream cycle may run when one or more conditions hold:
 
 ```mermaid
 sequenceDiagram
-    participant O as Soul Orchestrator
-    participant D as Dream Sandbox
-    participant M as Memory Reader
-    participant C as Constitution Engine
-    participant V as Evaluator
-    participant A as Audit Ledger
+    participant Orchestrator
+    participant Dream
+    participant Memory
+    participant Constitution
+    participant Evaluator
+    participant Ledger
 
-    O->>D: Start dream with goal, budget, allowed memory refs
-    D->>M: Read redacted bounded context
-    M-->>D: Memories with immutable provenance
-    D->>C: Read values, bounds, prohibited actions
-    C-->>D: Read-only constitutional constraints
+    Orchestrator->>Dream: start dream with budget
+    Dream->>Memory: read redacted context
+    Memory-->>Dream: memories with provenance
+    Dream->>Constitution: read bounds
+    Constitution-->>Dream: read-only constraints
     loop Counterfactual budget
-        D->>D: Generate scenario and competing responses
-        D->>D: Test diverse affected perspectives
+        Dream->>Dream: generate competing responses
+        Dream->>Dream: test affected perspectives
     end
-    D->>V: Submit imagined hypotheses and proposals
-    V->>V: Check provenance, contradictions, value effects
-    V-->>O: Ranked proposals (all marked imagined)
-    O->>A: Record dream receipt and result hashes
-    O->>O: Route proposals through normal change gate
+    Dream->>Evaluator: submit imagined proposals
+    Evaluator->>Evaluator: check contradictions
+    Evaluator-->>Orchestrator: ranked imagined proposals
+    Orchestrator->>Ledger: record dream receipt
+    Orchestrator->>Orchestrator: route through change gate
 ```
 
 ### 6.3 Hard Dream invariants
@@ -365,23 +372,21 @@ Thresholds must be calibrated in simulation. They are alerts, not diagnoses of s
 
 ```mermaid
 flowchart TD
-    T["Instability Trigger & Anomaly Detection"] --> S["Snapshot State & Implicated Evidence"]
-    S --> F["Freeze Affected Identity Updates"]
-    F --> I["Isolate Implicated Memories & Traits"]
-
-    I --> C["Generate Competing Causal Explanations"]
-    C --> D["Dream Counterfactual Sandbox Simulations"]
-    D --> R["Rank Smallest Reversible Repair Candidates"]
-
-    R --> G{"Protected Field or Severe Regression?"}
-    G -->|Yes| H["Human Review Required"]
-    G -->|No| P["Apply Bounded Repair Trial"]
-    H -->|Approved| P
-    H -->|Denied| X["Retain Freeze or Rollback State"]
-    P --> O["Observe System Health & Drift"]
-    O --> B{"Improved Without New Harm?"}
-    B -->|Yes| K["Retain Repair & Commit Version"]
-    B -->|No| X
+    trigger["Instability detected"] --> snapshot["Snapshot state"]
+    snapshot --> freeze["Freeze affected updates"]
+    freeze --> isolate["Isolate implicated memories"]
+    isolate --> causes["Competing explanations"]
+    causes --> dreamSim["Dream counterfactuals"]
+    dreamSim --> rank["Rank smallest repairs"]
+    rank --> gate{"Protected or severe?"}
+    gate -->|Yes| human["Human review"]
+    gate -->|No| trial["Bounded repair trial"]
+    human -->|Approved| trial
+    human -->|Denied| hold["Keep freeze or rollback"]
+    trial --> observe["Observe health"]
+    observe --> better{"Improved without harm?"}
+    better -->|Yes| keep["Retain repair"]
+    better -->|No| hold
 ```
 
 ### 8.4 Repair limits
@@ -401,28 +406,28 @@ Self-healing cannot:
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Host as Host Environment / Agent
-    participant Kernel as Soul Kernel / Reviewer
-    participant Cycle as Review Cycle Engine
-    participant Human as Authorized Human Reviewer
-    participant Ledger as Audit & State Ledger
+    participant Host
+    participant Kernel
+    participant Cycle
+    participant Human
+    participant Ledger
 
-    Host->>Cycle: soul_host_event(session_id, event_kind, payload)
-    Note over Cycle: MCP origin is never human, episode quarantined
-    Human->>Cycle: soul_review_start(session_id, trigger_kind)
-    Cycle->>Cycle: Watermark and extract memory_candidates
-    Cycle-->>Human: Candidates (interview one at a time)
-    loop Decisions
-        Human->>Cycle: human origin review_decision (soul_host SEAL)
-        Human->>Cycle: soul_review_stage_decision(candidate_id, decision, human_event_ref)
+    Host->>Cycle: soul_host_event
+    Note over Cycle: MCP origin is never human
+    Human->>Cycle: soul_review_start
+    Cycle->>Cycle: extract memory_candidates
+    Cycle-->>Human: candidates one at a time
+    loop Interview
+        Human->>Cycle: soul_host SEAL
+        Human->>Cycle: soul_review_stage_decision
     end
-    Human->>Cycle: soul_review_preview(cycle_id)
-    Cycle-->>Human: Preview hash
-    Human->>Cycle: soul_review_commit(cycle_id, commit_human_event_ref)
-    Note over Human,Cycle: type COMMIT in soul_host after SEAL
-    Cycle->>Kernel: Insert reviewed_memories, next memory_set version
-    Kernel->>Ledger: Receipt and audit chain
-    Ledger-->>Human: Commit receipt
+    Human->>Cycle: soul_review_preview
+    Cycle-->>Human: preview hash
+    Human->>Cycle: soul_review_commit
+    Note over Human,Cycle: type COMMIT after SEAL
+    Cycle->>Kernel: insert reviewed_memories
+    Kernel->>Ledger: receipt and audit chain
+    Ledger-->>Human: commit receipt
 ```
 
 ### 9.1 Approval request contract
@@ -449,7 +454,7 @@ erDiagram
     SOUL_VERSION ||--o{ HEALTH_REPORT : assessed_by
     SOUL_VERSION ||--|| AUDIT_EVENT : committed_by
     SOUL_VERSION ||--o{ ROLLBACK_POINT : restores
-    
+
     HOST_EVENT ||--o{ REVIEW_CYCLE : triggers
     REVIEW_CYCLE ||--o{ MEMORY_CANDIDATE : contains
     REVIEW_CYCLE ||--o{ REVIEW_DECISION : stages
@@ -547,23 +552,20 @@ Use one orchestrator with bounded specialist roles, not a free-form agent societ
 
 ```mermaid
 flowchart TD
-    O["Soul Orchestrator"]
-    
-    O --> P["Policy Evaluator"]
-    O --> V["Evidence Verifier"]
-    O --> R["Reflector"]
-    O --> D["Dream Sandbox"]
-    O --> H["Self-Healing Engine"]
-    
-    P --> G{"Commit Policy Gate"}
-    V --> G
-    R --> G
-    D --> G
-    H --> G
-    
-    G -->|Bounded & Valid| C["Transactional Commit"]
-    G -->|Protected Field| U["Human Review Required"]
-    G -->|Policy Violation| N["Reject & Log Warning"]
+    orchestrator["Soul orchestrator"]
+    orchestrator --> policy["Policy evaluator"]
+    orchestrator --> verifier["Evidence verifier"]
+    orchestrator --> reflector["Reflector"]
+    orchestrator --> dream["Dream sandbox"]
+    orchestrator --> healer["Self-healing"]
+    policy --> gate{"Commit policy gate"}
+    verifier --> gate
+    reflector --> gate
+    dream --> gate
+    healer --> gate
+    gate -->|"Bounded and valid"| commit["Transactional commit"]
+    gate -->|"Protected field"| review["Human review"]
+    gate -->|"Policy violation"| reject["Reject and log"]
 ```
 
 Each specialist returns structured artifacts only. No specialist writes soul state.

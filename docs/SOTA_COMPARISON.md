@@ -9,13 +9,13 @@ Contradiction checks use a **local token-overlap heuristic**, not a trained NLI 
 ## 1. Architectural taxonomy
 
 ```mermaid
-graph TD
-    subgraph TAXONOMY [" Agent Memory Design Philosophies "]
-        A["External Library / Passive API"] --> Mem0["Mem0<br/>(Vector + Entity Graph API)"]
-        B["Agent Operating System / Runtime"] --> Letta["Letta / MemGPT<br/>(Core RAM + Archival Disk)"]
-        C["Bi-Temporal Graph Engine"] --> Zep["Zep / Graphiti<br/>(Temporal Event Lineage)"]
-        D["Enterprise Knowledge ETL"] --> Cognee["Cognee<br/>(Extract, Cognify, Load)"]
-        E["Epistemic Authority & Bio-Homeostasis"] --> Soul["Soul Engine (v1.1.1)<br/>(Epistemic Rank + Neuromodulation + MCP)"]
+flowchart TD
+    subgraph philosophies["Agent memory philosophies"]
+        lib["External library"] --> mem0["Mem0"]
+        runtime["Agent OS runtime"] --> letta["Letta"]
+        graphEngine["Bi-temporal graph"] --> zep["Zep"]
+        etl["Knowledge ETL"] --> cognee["Cognee"]
+        epistemic["Epistemic bio-homeostasis"] --> soul["Soul Engine v1.1.1"]
     end
 ```
 

@@ -156,18 +156,18 @@ Type `SEAL` (one human event per decision), then `COMMIT` on the exact preview. 
 
 ```mermaid
 flowchart TD
-    E["Any ingest / soul_remember"] --> S["Secret scrubber"]
-    S --> Q["Quarantine: episodes table"]
-    Q --> NLI["Token NLI heuristic vs existing claims"]
-    NLI --> BIO["neuromodulators: DA / cortisol; serotonin derived"]
-    BIO --> START["soul_review_start"]
-    START --> IV["Human types SEAL in any MCP chat"]
-    IV --> ASK["Interview writes review_packet.json"]
-    ASK --> SEAL["soul_host tty: type SEAL then COMMIT"]
-    SEAL --> DB[("reviewed_memories = long-term")]
-    DB --> RECALL["Default soul_recall / soul_digest"]
-    DB --> HASH["SHA-256 commit receipt"]
-    HASH --> RB["Forward-only memory-set rollback"]
+    ingest(["Ingest or soul_remember"]) --> scrub["Secret scrubber"]
+    scrub --> quarantine["Quarantine episodes"]
+    quarantine --> nli["Token NLI heuristic"]
+    nli --> neuromod["neuromodulators"]
+    neuromod --> startReview["soul_review_start"]
+    startReview --> interview["Human types SEAL"]
+    interview --> packet["Write review_packet.json"]
+    packet --> sealHost["soul_host SEAL then COMMIT"]
+    sealHost --> reviewed[("reviewed_memories")]
+    reviewed --> recall["soul_recall and soul_digest"]
+    reviewed --> receipt["SHA-256 receipt"]
+    receipt --> rollback["Forward-only rollback"]
 ```
 
 Default **`soul_recall` / `soul_digest` read `reviewed_memories` only**. Quarantined episodes stay on disk until review commit. That is long-term memory, not “ingest = recall.”

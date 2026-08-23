@@ -77,24 +77,25 @@ sequenceDiagram
     autonumber
     participant User
     participant Agent
-    participant Soul as Soul MCP (v1.1.1)
-    participant Host as soul_host tty
+    participant Soul
+    participant Host
 
-    Agent->>Soul: soul_get_identity()
-    Agent->>Soul: soul_digest()
-    Note over Soul: digest = reviewed_memories only
+    Agent->>Soul: soul_get_identity
+    Soul-->>Agent: traits and hash
+    Agent->>Soul: soul_digest
+    Note over Soul: reviewed_memories only
     User->>Agent: task
-    Agent->>Soul: soul_remember(...)
+    Agent->>Soul: soul_remember
     Note over Soul: quarantine only
-    Agent->>Soul: soul_reward(valence=...)
+    Agent->>Soul: soul_reward
     User->>Agent: SEAL
-    Agent->>Soul: soul_review_start(session_id, trigger_kind=explicit)
-    Agent->>User: one candidate at a time (max 5)
-    User->>Agent: keep / drop / fix / defer / session-only
+    Agent->>Soul: soul_review_start
+    Agent->>User: one candidate at a time
+    User->>Agent: remember, correct, reject, defer
     Agent->>User: write review_packet.json
-    User->>Host: py -3 -m soul_host seal review_packet.json
+    User->>Host: soul_host seal packet
     User->>Host: type SEAL then COMMIT
-    Host->>Soul: human review_decision events + preview + human review_commit
+    Host->>Soul: human events then commit
     Note over Soul: reviewed_memories updated
 ```
 
