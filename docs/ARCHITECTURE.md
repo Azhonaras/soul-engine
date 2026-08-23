@@ -21,45 +21,17 @@ This system studies machine consciousness as a hypothesis. It does not treat flu
 
 ```mermaid
 flowchart TD
-    subgraph ingest["Ingestion"]
-        actors["External actors"] --> gateway["Interaction gateway"]
-        gateway --> policy["Consent and policy"]
-        policy --> experience["Experience ingest"]
-        experience --> quarantine[("Quarantine")]
-    end
-
-    subgraph cognition["Cognition"]
-        verifier["Evidence verifier"] --> reflector["Reflection"]
-        reflector -.->|"uncertain"| dream["Dream sandbox"]
-        dream -.->|"imagined"| orchestrator["Soul orchestrator"]
-        reflector --> orchestrator
-    end
-
-    quarantine --> verifier
-    quarantine -.->|"unverified"| reflector
-
-    subgraph governance["Governance"]
-        reviewer["Human reviewer"] --> reviewCycle["Review cycle"]
-        constitution["Constitution"] --> healer["Self-healing"]
-    end
-
-    constitution --> policy
-    constitution --> orchestrator
+    actors["Actors"] --> gateway["Gateway"]
+    gateway --> policy["Policy"]
+    policy --> ingest["Ingest"]
+    ingest --> quarantine[("Quarantine")]
+    quarantine --> verifier["Verifier"]
+    verifier --> reflector["Reflection"]
+    reflector --> orchestrator["Orchestrator"]
+    reviewer["Human"] --> reviewCycle["Review"]
     reviewCycle --> orchestrator
-    healer --> orchestrator
-
-    subgraph persist["Persistence"]
-        soulState[("Soul state")] --> neuromod[("neuromodulators")]
-        neuromod -.-> ledger[("Audit ledger")]
-        reviewed[("reviewed_memories")] --> ledger
-    end
-
-    orchestrator --> soulState
-    soulState --> healer
-    soulState -.->|"snapshot"| ledger
-    reviewCycle --> reviewed
-    reviewCycle --> soulState
-    reviewCycle --> ledger
+    orchestrator --> soulState[("State")]
+    soulState --> ledger[("Ledger")]
 ```
 
 Default `soul_recall` / `soul_digest` read **reviewed_memories**. Quarantine (`episodes`) is not identity until review commit.
@@ -96,26 +68,27 @@ Start as one process plus one relational database (`soul.db` in SQLite WAL mode)
 
 ```mermaid
 flowchart TD
-    receive["Receive experience"] --> episode["Create quarantined episode"]
-    episode --> consent{"Consent passed?"}
-    consent -->|No| reject["Reject or redact"]
+    receive["Receive experience"] --> episode["Quarantine episode"]
+    episode --> consent{"Consent?"}
+    consent -->|No| reject["Reject"]
     consent -->|Yes| evidence["Check evidence"]
-    evidence --> interpret["Competing interpretations"]
-    interpret --> uncertain{"Consequential or uncertain?"}
-    uncertain -->|Yes| dream["Adversarial Dream"]
-    dream --> proposal["Change proposal"]
+    evidence --> interpret["Interpret"]
+    interpret --> uncertain{"Uncertain?"}
+    uncertain -->|Yes| dream["Dream"]
+    dream --> proposal["Proposal"]
     uncertain -->|No| proposal
-    proposal --> protected{"Protected component?"}
-    protected -->|Yes| approval["Request human approval"]
-    approval -->|Denied| noChange["No soul change"]
-    approval -->|Approved| commitStep["Snapshot and commit"]
-    protected -->|No| bounds{"Within bounds?"}
-    bounds -->|No| noChange
-    bounds -->|Yes| commitStep
-    commitStep --> observe["Observe in production"]
-    observe --> health{"Health regression?"}
-    health -->|No| retain["Retain stable version"]
-    health -->|Yes| heal["Self-healing loop"]
+    proposal --> protected{"Protected?"}
+    protected -->|Yes| approval["Human approval"]
+    protected -->|No| bounds{"Bounds?"}
+    approval -->|Denied| stopA["No change"]
+    approval -->|Approved| commitA["Commit"]
+    bounds -->|No| stopB["No change"]
+    bounds -->|Yes| commitB["Commit"]
+    commitA --> observe["Observe"]
+    commitB --> observe
+    observe --> health{"Health drop?"}
+    health -->|No| retain["Keep"]
+    health -->|Yes| heal["Heal"]
 ```
 
 Live default recall is `reviewed_memories` after human review commit (sections 4.2 and 9), not this ingest-to-commit sketch.
@@ -153,20 +126,18 @@ Rules:
 ```mermaid
 stateDiagram-v2
     [*] --> Quarantined
-    Quarantined --> Rejected: consent or privacy fail
-    Quarantined --> Corroborating: eligible for verification
-    Corroborating --> Quarantined: insufficient evidence
-    Corroborating --> Contradicted: material conflict
-    Contradicted --> Corroborating: new independent evidence
-    Quarantined --> Promoted: human review commit
-    Promoted --> Superseded: better interpretation or evidence
-    Promoted --> Restricted: consent or policy changed
-    Restricted --> Deleted: valid deletion cascade
-    Quarantined --> Deleted: expiry or deletion request
+    Quarantined --> Rejected: fail
+    Quarantined --> Corroborating: verify
+    Corroborating --> Contradicted: conflict
+    Contradicted --> Corroborating: retry
+    Quarantined --> Promoted: commit
+    Promoted --> Superseded: replace
+    Promoted --> Restricted: policy
+    Restricted --> Deleted: delete
+    Quarantined --> Deleted: expiry
     Rejected --> Deleted: expiry
-    Superseded --> Restricted: linked personal data
-    Superseded --> Archived: retention permits
-    Archived --> Deleted: retention expires
+    Superseded --> Archived: retain
+    Archived --> Deleted: expiry
 ```
 
 ### 4.1 Memory types
@@ -247,20 +218,15 @@ sequenceDiagram
     participant Evaluator
     participant Ledger
 
-    Orchestrator->>Dream: start dream with budget
-    Dream->>Memory: read redacted context
-    Memory-->>Dream: memories with provenance
+    Orchestrator->>Dream: start with budget
+    Dream->>Memory: read context
+    Memory-->>Dream: memories
     Dream->>Constitution: read bounds
-    Constitution-->>Dream: read-only constraints
-    loop Counterfactual budget
-        Dream->>Dream: generate competing responses
-        Dream->>Dream: test affected perspectives
-    end
-    Dream->>Evaluator: submit imagined proposals
-    Evaluator->>Evaluator: check contradictions
-    Evaluator-->>Orchestrator: ranked imagined proposals
-    Orchestrator->>Ledger: record dream receipt
-    Orchestrator->>Orchestrator: route through change gate
+    Constitution-->>Dream: constraints
+    Dream->>Dream: compete responses
+    Dream->>Evaluator: imagined proposals
+    Evaluator-->>Orchestrator: ranked proposals
+    Orchestrator->>Ledger: dream receipt
 ```
 
 ### 6.3 Hard Dream invariants
@@ -372,21 +338,21 @@ Thresholds must be calibrated in simulation. They are alerts, not diagnoses of s
 
 ```mermaid
 flowchart TD
-    trigger["Instability detected"] --> snapshot["Snapshot state"]
-    snapshot --> freeze["Freeze affected updates"]
-    freeze --> isolate["Isolate implicated memories"]
-    isolate --> causes["Competing explanations"]
-    causes --> dreamSim["Dream counterfactuals"]
-    dreamSim --> rank["Rank smallest repairs"]
-    rank --> gate{"Protected or severe?"}
+    trigger["Instability"] --> snapshot["Snapshot"]
+    snapshot --> freeze["Freeze updates"]
+    freeze --> isolate["Isolate memories"]
+    isolate --> causes["Explanations"]
+    causes --> dreamSim["Dream"]
+    dreamSim --> rank["Rank repairs"]
+    rank --> gate{"Severe?"}
     gate -->|Yes| human["Human review"]
-    gate -->|No| trial["Bounded repair trial"]
+    gate -->|No| trial["Repair trial"]
     human -->|Approved| trial
-    human -->|Denied| hold["Keep freeze or rollback"]
-    trial --> observe["Observe health"]
-    observe --> better{"Improved without harm?"}
-    better -->|Yes| keep["Retain repair"]
-    better -->|No| hold
+    human -->|Denied| holdA["Keep freeze"]
+    trial --> observe["Observe"]
+    observe --> better{"Improved?"}
+    better -->|Yes| keep["Keep repair"]
+    better -->|No| holdB["Rollback"]
 ```
 
 ### 8.4 Repair limits
@@ -412,22 +378,15 @@ sequenceDiagram
     participant Human
     participant Ledger
 
-    Host->>Cycle: soul_host_event
-    Note over Cycle: MCP origin is never human
-    Human->>Cycle: soul_review_start
-    Cycle->>Cycle: extract memory_candidates
-    Cycle-->>Human: candidates one at a time
-    loop Interview
-        Human->>Cycle: soul_host SEAL
-        Human->>Cycle: soul_review_stage_decision
-    end
-    Human->>Cycle: soul_review_preview
+    Host->>Cycle: host event
+    Human->>Cycle: review start
+    Cycle-->>Human: one candidate
+    Human->>Cycle: stage decision
+    Human->>Cycle: preview
     Cycle-->>Human: preview hash
-    Human->>Cycle: soul_review_commit
-    Note over Human,Cycle: type COMMIT after SEAL
-    Cycle->>Kernel: insert reviewed_memories
-    Kernel->>Ledger: receipt and audit chain
-    Ledger-->>Human: commit receipt
+    Human->>Cycle: review commit
+    Cycle->>Kernel: insert memories
+    Kernel->>Ledger: receipt
 ```
 
 ### 9.1 Approval request contract
@@ -552,20 +511,20 @@ Use one orchestrator with bounded specialist roles, not a free-form agent societ
 
 ```mermaid
 flowchart TD
-    orchestrator["Soul orchestrator"]
-    orchestrator --> policy["Policy evaluator"]
-    orchestrator --> verifier["Evidence verifier"]
+    orchestrator["Orchestrator"]
+    orchestrator --> policy["Policy"]
+    orchestrator --> verifier["Verifier"]
     orchestrator --> reflector["Reflector"]
-    orchestrator --> dream["Dream sandbox"]
-    orchestrator --> healer["Self-healing"]
-    policy --> gate{"Commit policy gate"}
+    orchestrator --> dream["Dream"]
+    orchestrator --> healer["Healing"]
+    policy --> gate{"Gate"}
     verifier --> gate
     reflector --> gate
     dream --> gate
     healer --> gate
-    gate -->|"Bounded and valid"| commit["Transactional commit"]
-    gate -->|"Protected field"| review["Human review"]
-    gate -->|"Policy violation"| reject["Reject and log"]
+    gate -->|Valid| commit["Commit"]
+    gate -->|Protected| review["Human review"]
+    gate -->|Violation| reject["Reject"]
 ```
 
 Each specialist returns structured artifacts only. No specialist writes soul state.

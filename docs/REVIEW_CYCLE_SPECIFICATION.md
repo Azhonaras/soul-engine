@@ -25,16 +25,16 @@ A review cycle is not a chat session. Idle, “bye”, and the model must not co
 
 ```mermaid
 stateDiagram-v2
-    [*] --> active
-    active --> preparing: soul_review_start
-    preparing --> review_ready: candidates extracted
-    review_ready --> reviewing: human decisions
-    reviewing --> pending_commit: preview persisted
-    pending_commit --> committed: human review_commit event
-    pending_commit --> reviewing: preview regenerated
-    review_ready --> sealed_no_changes: nothing durable
-    reviewing --> deferred: postpone
-    committed --> [*]
+    [*] --> Active
+    Active --> Preparing: start
+    Preparing --> Ready: extracted
+    Ready --> Reviewing: decisions
+    Reviewing --> Pending: preview
+    Pending --> Committed: commit
+    Pending --> Reviewing: redo
+    Ready --> Empty: no change
+    Reviewing --> Deferred: postpone
+    Committed --> [*]
 ```
 
 ---

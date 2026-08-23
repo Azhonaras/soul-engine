@@ -80,23 +80,20 @@ sequenceDiagram
     participant Soul
     participant Host
 
-    Agent->>Soul: soul_get_identity
-    Soul-->>Agent: traits and hash
-    Agent->>Soul: soul_digest
-    Note over Soul: reviewed_memories only
+    Agent->>Soul: get identity
+    Soul-->>Agent: traits
+    Agent->>Soul: digest
+    Soul-->>Agent: reviewed only
     User->>Agent: task
-    Agent->>Soul: soul_remember
-    Note over Soul: quarantine only
-    Agent->>Soul: soul_reward
+    Agent->>Soul: remember
+    Soul-->>Agent: quarantined
     User->>Agent: SEAL
-    Agent->>Soul: soul_review_start
-    Agent->>User: one candidate at a time
-    User->>Agent: remember, correct, reject, defer
-    Agent->>User: write review_packet.json
-    User->>Host: soul_host seal packet
-    User->>Host: type SEAL then COMMIT
-    Host->>Soul: human events then commit
-    Note over Soul: reviewed_memories updated
+    Agent->>Soul: review start
+    Agent->>User: one candidate
+    User->>Agent: decision
+    User->>Host: soul_host COMMIT
+    Host->>Soul: commit
+    Soul-->>Host: receipt
 ```
 
 Human origin is tty `soul_host` only. MCP `soul_review_commit` is the same tool in every harness; it needs the human row `soul_host` SEAL minted. Model-minted `soul_host_event` ids fail.

@@ -156,18 +156,18 @@ Type `SEAL` (one human event per decision), then `COMMIT` on the exact preview. 
 
 ```mermaid
 flowchart TD
-    ingest(["Ingest or soul_remember"]) --> scrub["Secret scrubber"]
-    scrub --> quarantine["Quarantine episodes"]
-    quarantine --> nli["Token NLI heuristic"]
-    nli --> neuromod["neuromodulators"]
-    neuromod --> startReview["soul_review_start"]
-    startReview --> interview["Human types SEAL"]
-    interview --> packet["Write review_packet.json"]
-    packet --> sealHost["soul_host SEAL then COMMIT"]
-    sealHost --> reviewed[("reviewed_memories")]
-    reviewed --> recall["soul_recall and soul_digest"]
-    reviewed --> receipt["SHA-256 receipt"]
-    receipt --> rollback["Forward-only rollback"]
+    ingest(["Ingest"]) --> scrub["Scrub secrets"]
+    scrub --> quarantine["Quarantine"]
+    quarantine --> nli["Token NLI"]
+    nli --> neuromod["Neuromodulators"]
+    neuromod --> startReview["Review start"]
+    startReview --> interview["Human SEAL"]
+    interview --> packet["review_packet.json"]
+    packet --> sealHost["soul_host COMMIT"]
+    sealHost --> reviewed[("Memories")]
+    reviewed --> recall["Recall"]
+    reviewed --> receipt["Receipt"]
+    receipt --> rollback["Rollback"]
 ```
 
 Default **`soul_recall` / `soul_digest` read `reviewed_memories` only**. Quarantined episodes stay on disk until review commit. That is long-term memory, not “ingest = recall.”

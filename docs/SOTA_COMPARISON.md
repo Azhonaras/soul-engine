@@ -10,12 +10,12 @@ Contradiction checks use a **local token-overlap heuristic**, not a trained NLI 
 
 ```mermaid
 flowchart TD
-    subgraph philosophies["Agent memory philosophies"]
-        lib["External library"] --> mem0["Mem0"]
-        runtime["Agent OS runtime"] --> letta["Letta"]
-        graphEngine["Bi-temporal graph"] --> zep["Zep"]
+    subgraph philosophies["Memory philosophies"]
+        lib["Library"] --> mem0["Mem0"]
+        runtime["Agent OS"] --> letta["Letta"]
+        graphEngine["Temporal graph"] --> zep["Zep"]
         etl["Knowledge ETL"] --> cognee["Cognee"]
-        epistemic["Epistemic bio-homeostasis"] --> soul["Soul Engine v1.1.1"]
+        epistemic["Bio-homeostasis"] --> soul["Soul Engine"]
     end
 ```
 
