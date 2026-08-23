@@ -131,27 +131,28 @@ Type `SEAL` (one human event per decision), then `COMMIT` on the exact preview. 
 ## Architecture
 
 ```
-                         THE SOUL COGNITIVE LOOP (v1.1.1)
- ┌─────────────────────────────────────────────────────────────────────────┐
- │ 1. INGESTION & DEFENSE                                                  │
- │    New Observation ──► Secret Scrubber ──► Epistemic Provenance Check  │
- │    (verified > observed > inferred > reported > imagined)              │
- ├─────────────────────────────────────────────────────────────────────────┤
- │ 2. CONTRADICTION RESOLUTION & QUARANTINE                                │
- │    Candidate Top-5 Search ──► Token NLI heuristic ──► Tensions ledger  │
- ├─────────────────────────────────────────────────────────────────────────┤
- │ 3. BIO-HOMEOSTATIC NEUROMODULATION                                      │
- │    Task Success (+Valence) ──► Dopamine Surge (Audacity ↑, Anxiety ↓)   │
- │    Task Failure (-Valence) ──► Cortisol Surge (Humility ↑, Anxiety ↑)   │
- │    Idle Rest Cycles        ──► Serotonergic Decay (λ = 0.15)            │
- ├─────────────────────────────────────────────────────────────────────────┤
- │ 4. CRYPTOGRAPHIC STATE LEDGER                                           │
- │    SHA-256 Merkle Chain ──► Point-in-Time State Rollback (v1.0: < 2 ms) │
- ├─────────────────────────────────────────────────────────────────────────┤
- │ 5. HUMAN REVIEW CYCLE GOVERNANCE (v1.1.1)                               │
- │    Watermark Freezes ──► Pre-Commit Diffs ──► SHA-256 Commit Receipts   │
- │    Forward-Only Rollback (V → V+1) ──► Salt-Nullified Privacy Erasure   │
- └─────────────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------------+
+|                    THE SOUL COGNITIVE LOOP (v1.1.1)                    |
++------------------------------------------------------------------------+
+| 1. INGESTION & DEFENSE                                                 |
+|    New Observation -> Secret Scrubber -> Epistemic Provenance Check    |
+|    (verified > observed > inferred > reported > imagined)              |
++------------------------------------------------------------------------+
+| 2. CONTRADICTION RESOLUTION & QUARANTINE                               |
+|    Candidate Top-5 Search -> Token NLI heuristic -> Tensions ledger    |
++------------------------------------------------------------------------+
+| 3. BIO-HOMEOSTATIC NEUROMODULATION                                     |
+|    Task Success (+Valence) -> Dopamine Surge (Audacity ↑, Anxiety ↓)   |
+|    Task Failure (-Valence) -> Cortisol Surge (Humility ↑, Anxiety ↑)   |
+|    Idle Rest Cycles        -> Serotonergic Decay (λ = 0.15)            |
++------------------------------------------------------------------------+
+| 4. CRYPTOGRAPHIC STATE LEDGER                                          |
+|    SHA-256 Merkle Chain -> Point-in-Time State Rollback (v1.0: < 2 ms) |
++------------------------------------------------------------------------+
+| 5. HUMAN REVIEW CYCLE GOVERNANCE (v1.1.1)                              |
+|    Watermark Freezes -> Pre-Commit Diffs -> SHA-256 Commit Receipts    |
+|    Forward-Only Rollback (V -> V+1) -> Salt-Nullified Privacy Erasure  |
++------------------------------------------------------------------------+
 ```
 
 ```mermaid
