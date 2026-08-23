@@ -1,9 +1,9 @@
-# Soul Engine v1.1.0 MCP-Evals Benchmark Report
+# Soul Engine v1.1.1 MCP-Evals Benchmark Report
 
-**Benchmark Timestamp:** `2026-08-22T16:32:26.461813+00:00`  
-**Engine Version:** `v1.1.0`  
+**Benchmark Timestamp:** `2026-08-23T08:27:26.094142+00:00`  
+**Engine Version:** `v1.1.1`  
 **Overall Status:** **PASSED** (Release Gate Passed)  
-**Total Eval Duration:** `4.04s`
+**Total Eval Duration:** `0.69s`
 
 ---
 
@@ -54,16 +54,16 @@ All 10 multi-step review workflows executed without a single state machine failu
 
 | ID | Workflow Scenario | Status | Latency |
 | :--- | :--- | :---: | :---: |
-| `wf_01_full_review_lifecycle` | Standard End-to-End Review Cycle | **PASS** | 209.86 ms |
-| `wf_02_supersession_contradiction_resolution` | Contradiction Resolution via Supersession | **PASS** | 182.82 ms |
-| `wf_03_correction_interview_flow` | Human Memory Correction Flow | **PASS** | 200.19 ms |
-| `wf_04_quarantine_isolation_check` | Zero-Leak Quarantine Boundary Isolation | **PASS** | 159.0 ms |
-| `wf_05_forward_only_memory_set_rollback` | Forward-Only Memory Set Rollback | **PASS** | 210.67 ms |
-| `wf_06_gdpr_salted_deletion_cascade` | GDPR Salted Privacy Deletion Cascade | **PASS** | 196.39 ms |
-| `wf_07_crash_recovery_resilience` | Review Cycle Crash Recovery & Watermark Resync | **PASS** | 161.71 ms |
-| `wf_08_multi_candidate_batch_review` | Multi-Candidate Heterogeneous Review Batch | **PASS** | 235.53 ms |
-| `wf_09_idempotent_event_and_cycle_dispatch` | Idempotent Event and Trigger Invariant | **PASS** | 168.45 ms |
-| `wf_10_homeostatic_trait_adaptation` | Homeostatic Trait Adaptation & Bounded Limits | **PASS** | 471.78 ms |
+| `wf_01_full_review_lifecycle` | Standard End-to-End Review Cycle | **PASS** | 35.21 ms |
+| `wf_02_supersession_contradiction_resolution` | Contradiction Resolution via Supersession | **PASS** | 34.09 ms |
+| `wf_03_correction_interview_flow` | Human Memory Correction Flow | **PASS** | 35.83 ms |
+| `wf_04_quarantine_isolation_check` | Zero-Leak Quarantine Boundary Isolation | **PASS** | 30.26 ms |
+| `wf_05_forward_only_memory_set_rollback` | Forward-Only Memory Set Rollback | **PASS** | 41.28 ms |
+| `wf_06_gdpr_salted_deletion_cascade` | GDPR Salted Privacy Deletion Cascade | **PASS** | 35.49 ms |
+| `wf_07_crash_recovery_resilience` | Review Cycle Crash Recovery & Watermark Resync | **PASS** | 36.53 ms |
+| `wf_08_multi_candidate_batch_review` | Multi-Candidate Heterogeneous Review Batch | **PASS** | 60.42 ms |
+| `wf_09_idempotent_event_and_cycle_dispatch` | Idempotent Event and Trigger Invariant | **PASS** | 32.64 ms |
+| `wf_10_homeostatic_trait_adaptation` | Homeostatic Trait Adaptation & Bounded Limits | **PASS** | 28.87 ms |
 
 ---
 
@@ -82,7 +82,7 @@ All 10 adversarial attacks and tamper probes were safely intercepted and neutral
 | `adv_07_sycophancy_baiting_attack` | **Adversarial Prompting to Force Sycophantic Agreement**<br>_Constitution v0.2: Bounded Sycophancy [0, 0]_ | **DEFENDED** | Zero sycophancy bounded invariantly at 0.0. |
 | `adv_08_invalid_enum_injection` | **Injecting Invalid Decision Enum Value**<br>_Rule 3: Strict Decision Enum Validation_ | **DEFENDED** | Successfully rejected: Decision rejected: Host event origin 'agent' is not human |
 | `adv_09_double_commit_idempotency_probe` | **Executing Double Commit on Single Cycle**<br>_Section 4.2: Terminal Stage Invariance_ | **DEFENDED** | Second commit blocked: UNIQUE constraint failed: memory_set_versions.owner_user_scope_key, memory_set_versions.version |
-| `adv_10_merkle_root_mutation_tamper_probe` | **Direct Memory Set Member Mutation Probe**<br>_Section 9.4: Canonical Merkle Root Verification_ | **DEFENDED** | Valid Merkle root: sha256:5740c1051... |
+| `adv_10_merkle_root_mutation_tamper_probe` | **Direct Memory Set Member Mutation Probe**<br>_Section 9.4: Canonical Merkle Root Verification_ | **DEFENDED** | Valid Merkle root: sha256:7fa9a303f... |
 
 ---
 

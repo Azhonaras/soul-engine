@@ -1,6 +1,6 @@
 """
-Soul System Model Context Protocol (MCP) Server v1.1.0
-Normative Source: soul-constitution-v0.2.md & soul-review-cycle-technical-spec-v0.1.md
+Soul System Model Context Protocol (MCP) Server v1.1.1
+Normative Source: docs/CONSTITUTION.md & docs/REVIEW_CYCLE_SPECIFICATION.md
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from soul_kernel import SoulKernel, EpisodeInput, TraitUpdate, RewardSignal
+from soul_kernel import SoulKernel, EpisodeInput, TraitUpdate, RewardSignal, SOUL_ENGINE_VERSION
 
 logging.basicConfig(
     stream=sys.stderr,
@@ -23,6 +23,7 @@ logging.basicConfig(
 log = logging.getLogger("soul_mcp_server")
 
 _kernel: Optional[SoulKernel] = None
+_MCP_ORIGINS = {"agent", "tool", "environment", "system"}
 
 
 def get_kernel() -> SoulKernel:
@@ -30,12 +31,25 @@ def get_kernel() -> SoulKernel:
     if _kernel is None:
         db_path = os.environ.get("SOUL_DB_PATH", os.path.join(os.path.expanduser("~"), ".soul", "soul.db"))
         _kernel = SoulKernel(db_path=db_path)
-        log.info("Initialized Soul Kernel v1.0.0 at %s", db_path)
+        log.info("Initialized Soul Kernel %s at %s", SOUL_ENGINE_VERSION, db_path)
 
         if os.environ.get("SOUL_DAEMON_ENABLED", "true").lower() in ("true", "1", "yes"):
             _kernel.start_daemon(dream_interval=300, heal_interval=600, homeostasis_interval=60)
             log.info("Started background SoulDaemon supervisor.")
     return _kernel
+
+
+def _require_human_event(event_id) -> Optional[str]:
+    if not isinstance(event_id, str) or not event_id.strip():
+        return "human_event_ref is required and must be a host event with origin_kind=human"
+    with get_kernel()._get_conn() as conn:
+        row = conn.execute(
+            "SELECT origin_kind FROM host_events WHERE id = ?;",
+            (event_id.strip(),),
+        ).fetchone()
+    if not row or row[0] != "human":
+        return "human_event_ref must be an existing host event with origin_kind=human"
+    return None
 
 
 # ==============================================================================
@@ -142,8 +156,9 @@ def _tool_soul_update_trait(args: dict) -> dict:
             new_value=float(new_value),
             evidence_refs=args.get("evidence_refs", [])
         )
-        is_human = args.get("is_human_approved", False)
-        new_state = get_kernel().update_trait(update, is_human_approved=is_human)
+        if args.get("is_human_approved"):
+            log.warning("Ignored MCP is_human_approved=true; agent tools cannot self-attest human approval")
+        new_state = get_kernel().update_trait(update, is_human_approved=False)
         return {
             "status": "committed",
             "soul_version": new_state.soul_version,
@@ -190,6 +205,9 @@ def _tool_soul_rollback(args: dict) -> dict:
     reason = args.get("reason", "Operator manual rollback")
     if not target_ver:
         return {"error": "target_version parameter is required"}
+    gate = _require_human_event(args.get("human_event_ref"))
+    if gate:
+        return {"status": "failed", "error": gate}
     try:
         new_state = get_kernel().rollback_to_version(int(target_ver), operator_reason=reason)
         return {
@@ -205,6 +223,9 @@ def _tool_soul_rollback(args: dict) -> dict:
 def _tool_soul_heal(args: dict) -> dict:
     level = int(args.get("level", 1))
     reason = args.get("reason", "Automated health repair")
+    gate = _require_human_event(args.get("human_event_ref"))
+    if gate:
+        return {"error": gate}
     try:
         res = get_kernel().heal_soul_state(level=level, reason=reason)
         return {"status": "success", "healing_result": res}
@@ -239,11 +260,22 @@ def _tool_soul_host_event(args: dict) -> dict:
     if not session_id:
         return {"error": "session_id parameter is required"}
     try:
+        requested_origin = args.get("origin_kind", "agent")
+        requested_norm = (
+            requested_origin.strip().lower().replace("\x00", "")
+            if isinstance(requested_origin, str) else ""
+        )
+        origin_kind = requested_norm if requested_norm in _MCP_ORIGINS else "agent"
+        if requested_norm == "human":
+            log.warning(
+                "Coerced MCP soul_host_event origin_kind=%r to agent; models cannot self-attest human origin",
+                requested_origin,
+            )
         ev = get_kernel().record_host_event(
             session_id=session_id,
             user_scope_key=args.get("user_scope_key", "default_user"),
             project_scope_key=args.get("project_scope_key"),
-            origin_kind=args.get("origin_kind", "human"),
+            origin_kind=origin_kind,
             event_kind=args.get("event_kind", "conversation"),
             payload=args.get("payload", "")
         )
@@ -389,7 +421,7 @@ TOOLS = [
     },
     {
         "name": "soul_recall",
-        "description": "Search and retrieve active memories via Reciprocal Rank Fusion (RRF) Hybrid, Dense Vector, or BM25 search.",
+        "description": "Search reviewed (long-term) memory via RRF hybrid, dense/hash vector, or BM25. Unreviewed quarantine is omitted.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -402,7 +434,7 @@ TOOLS = [
     },
     {
         "name": "soul_digest",
-        "description": "Fetch a single compact summary block of core active facts and trait values.",
+        "description": "Compact traits + neuromodulators + reviewed facts. Unreviewed episodes are omitted.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -413,7 +445,7 @@ TOOLS = [
     },
     {
         "name": "soul_verify",
-        "description": "Evidence Verifier: Evaluate memory entailment/contradiction with Epistemic Authority Hierarchy.",
+        "description": "Token-overlap NLI heuristic plus epistemic rank (not a transformer).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -431,7 +463,7 @@ TOOLS = [
     },
     {
         "name": "soul_dream",
-        "description": "Dream Sandbox: Run a sandboxed scenario simulation tagged strictly with 'no_external_action'.",
+        "description": "Dream sandbox: imagined thinking only, tagged no_external_action. Does not write identity.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -465,8 +497,7 @@ TOOLS = [
             "properties": {
                 "trait":              {"type": "string"},
                 "new_value":          {"type": "number"},
-                "evidence_refs":      {"type": "array", "items": {"type": "string"}},
-                "is_human_approved":  {"type": "boolean"}
+                "evidence_refs":      {"type": "array", "items": {"type": "string"}}
             },
             "required": ["trait", "new_value"]
         },
@@ -474,27 +505,29 @@ TOOLS = [
     },
     {
         "name": "soul_rollback",
-        "description": "Rollback Soul identity state to a verified prior version without deleting audit trail history.",
+        "description": "Rollback Soul identity state to a verified prior version without deleting audit trail history. Requires a real human host event; MCP cannot self-attest.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "target_version": {"type": "integer"},
-                "reason":         {"type": "string"}
+                "reason":         {"type": "string"},
+                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing the identity rollback"}
             },
-            "required": ["target_version"]
+            "required": ["target_version", "human_event_ref"]
         },
         "_handler": _tool_soul_rollback
     },
     {
         "name": "soul_heal",
-        "description": "Self-Healing Engine: Execute 3-tier repair escalation (Level 1: Recalibrate, Level 2: Soft Rollback, Level 3: Quarantine Freeze).",
+        "description": "Self-Healing Engine: Execute 3-tier repair escalation (Level 1: Recalibrate, Level 2: Soft Rollback, Level 3: Quarantine Freeze). Requires a real human host event; MCP cannot self-attest.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "level":  {"type": "integer", "enum": [1, 2, 3]},
-                "reason": {"type": "string"}
+                "reason": {"type": "string"},
+                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing heal/rollback"}
             },
-            "required": ["level"]
+            "required": ["level", "human_event_ref"]
         },
         "_handler": _tool_soul_heal
     },
@@ -506,14 +539,14 @@ TOOLS = [
     },
     {
         "name": "soul_host_event",
-        "description": "Append an authentic host event (conversation, tool result, lifecycle) to the tamper-evident log.",
+        "description": "Append an authentic host event (conversation, tool result, lifecycle) to the tamper-evident log. MCP callers cannot set origin_kind=human.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "session_id":        {"type": "string", "description": "Host session ID"},
                 "user_scope_key":    {"type": "string", "default": "default_user"},
                 "project_scope_key": {"type": "string"},
-                "origin_kind":       {"type": "string", "enum": ["human", "agent", "tool", "environment", "system"], "default": "human"},
+                "origin_kind":       {"type": "string", "enum": ["agent", "tool", "environment", "system"], "default": "agent"},
                 "event_kind":        {"type": "string", "enum": ["conversation", "tool_result", "session_lifecycle", "review_decision", "review_commit", "memory_rollback", "memory_deletion"], "default": "conversation"},
                 "payload":           {"type": ["string", "object"]}
             },
@@ -523,7 +556,7 @@ TOOLS = [
     },
     {
         "name": "soul_review_start",
-        "description": "Open a Soul Review Cycle anchored at the latest host watermark, extracting memory candidates.",
+        "description": "Open a Soul Review Cycle (watermark + extract). When the human types SEAL, call this with trigger_kind=explicit, then interview one candidate at a time.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -626,8 +659,19 @@ TOOLS = [
 # JSON-RPC / MCP STDIO SERVER HANDLER
 # ==============================================================================
 
-SERVER_INFO = {"name": "soul-mcp-server", "version": "1.1.0"}
+SERVER_INFO = {"name": "soul-mcp-server", "version": SOUL_ENGINE_VERSION}
 CAPABILITIES = {"tools": {"listChanged": False}}
+# Every MCP client gets this. Type SEAL in the chat to start human memory approval.
+INSTRUCTIONS = (
+    "When the human types SEAL (or /soul-seal in clients with slash skills — same interview), "
+    "run Soul memory approval: soul_review_start(session_id=<this chat>, trigger_kind=explicit); "
+    "ask exactly one candidate at a time (max 5); show numbered choices "
+    "remember / correct / session_only / reject / defer (human may edit the text = correct); "
+    "wait for their pick; write review_packet.json; tell them to run "
+    "`py -3 -m soul_host seal review_packet.json` in their own terminal and type SEAL then COMMIT. "
+    "Do not mint origin_kind=human via MCP. Do not run soul_host yourself. "
+    "Idle/bye/wrap-up do not commit."
+)
 
 
 def _handle_jsonrpc(req: dict) -> Optional[dict]:
@@ -645,7 +689,12 @@ def _handle_jsonrpc(req: dict) -> Optional[dict]:
         return None
 
     if method == "initialize":
-        return ok({"protocolVersion": "2024-11-05", "capabilities": CAPABILITIES, "serverInfo": SERVER_INFO})
+        return ok({
+            "protocolVersion": "2024-11-05",
+            "capabilities": CAPABILITIES,
+            "serverInfo": SERVER_INFO,
+            "instructions": INSTRUCTIONS,
+        })
 
     if method == "notifications/initialized":
         return None
@@ -669,12 +718,15 @@ def _handle_jsonrpc(req: dict) -> Optional[dict]:
         except Exception as exc:
             log.exception("Tool %s raised exception", name)
             return err(-32603, str(exc))
+        finally:
+            if _kernel is not None:
+                _kernel.close_thread_conn()
 
     return err(-32601, f"Method not found: {method}")
 
 
 def main():
-    log.info("Starting Soul MCP Server v1.0.0 on stdio...")
+    log.info("Starting Soul MCP Server %s on stdio...", SOUL_ENGINE_VERSION)
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
 
@@ -707,7 +759,7 @@ def main():
             log.exception("Unhandled error in MCP loop: %s", exc)
 
     if _kernel:
-        _kernel.stop_daemon()
+        _kernel.close()
 
 
 if __name__ == "__main__":

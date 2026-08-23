@@ -16,6 +16,3 @@ updates:
           - "pytest*"
           - "ruff*"
           - "mypy*"
-      core-dependencies:
-        patterns:
-          - "numpy*"

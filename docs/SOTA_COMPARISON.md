@@ -1,6 +1,8 @@
-# Industry landscape benchmark: Soul Engine (v1.1.0) vs. alternative agent memory systems
+# Industry landscape benchmark: Soul Engine (v1.1.1) vs. alternative agent memory systems
 
-This report provides an empirical and architectural comparison between Soul Engine (v1.1.0) and other agent memory frameworks: Mem0, Letta (MemGPT), Zep (Graphiti), and Cognee.
+This report provides an architectural comparison between Soul Engine (v1.1.1) and other agent memory frameworks: Mem0, Letta (MemGPT), Zep (Graphiti), and Cognee.
+
+Contradiction checks use a **local token-overlap heuristic**, not a trained NLI model. Unverified claims are quarantined; that is the gaslighting control, not 100% semantic understanding.
 
 ---
 
@@ -13,7 +15,7 @@ graph TD
         B["Agent Operating System / Runtime"] --> Letta["Letta / MemGPT<br/>(Core RAM + Archival Disk)"]
         C["Bi-Temporal Graph Engine"] --> Zep["Zep / Graphiti<br/>(Temporal Event Lineage)"]
         D["Enterprise Knowledge ETL"] --> Cognee["Cognee<br/>(Extract, Cognify, Load)"]
-        E["Epistemic Authority & Bio-Homeostasis"] --> Soul["Soul Engine (v1.1.0)<br/>(Epistemic Rank + Neuromodulation + MCP)"]
+        E["Epistemic Authority & Bio-Homeostasis"] --> Soul["Soul Engine (v1.1.1)<br/>(Epistemic Rank + Neuromodulation + MCP)"]
     end
 ```
 
@@ -21,11 +23,11 @@ graph TD
 
 ## 2. Comparative capability matrix
 
-| Capability / Dimension | **Soul Engine (v1.1.0)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Cognee** |
+| Capability / Dimension | **Soul Engine (v1.1.1)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Cognee** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Primary Paradigm** | Epistemic Identity & Bio-Homeostasis | Semantic Memory SDK | Virtual OS Runtime | Bi-Temporal Graph | Knowledge Base ETL |
 | **Epistemic Authority Hierarchy** | **Yes ($\text{verified} > \dots > \text{imagined}$)** | No (Flat facts) | No (Unweighted) | No (Time-based only) | No (Ontological only) |
-| **Byzantine Gaslighting Defense** | **100% (Quarantine via NLI)** | 0% (Blind overwrite) | 0% (Vulnerable) | Partial (Appends new edge) | 0% (Vulnerable) |
+| **Byzantine Gaslighting Defense** | **Quarantine + token NLI heuristic** | 0% (Blind overwrite) | 0% (Vulnerable) | Partial (Appends new edge) | 0% (Vulnerable) |
 | **Bio-Neuromodulation Loop** | **Yes (Dopamine / Cortisol / Serotonin)**| No | No | No | No |
 | **Dynamic Trait Clamping** | **Yes (Constitutional $[min, max]$)** | No | No | No | No |
 | **Cryptographic Hash Chain** | **Yes (SHA-256 State Ledger)** | No | No | No | No |
@@ -47,8 +49,9 @@ graph TD
  • Letta         : Ingests into archival memory without authority verification. [VULNERABLE]
  • Zep           : Creates newer temporal edge invalidating older fact. [VULNERABLE]
  • Cognee        : Creates parallel graph relation. [AMBIGUOUS]
- • Soul Engine   : Evaluates Epistemic Rank (reported < verified) -> Quarantines claim as 
-                   Contradicted Tension -> Preserves Ground Truth. [IMMUNE]
+ • Soul Engine   : Lower-rank claim stays quarantined / contradicted; it does not
+                   enter default recall until human review commit. Token NLI is a
+                   heuristic, not a transformer. [QUARANTINED, NOT MAGIC]
 ```
 
 ---

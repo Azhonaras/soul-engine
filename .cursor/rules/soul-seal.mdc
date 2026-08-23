@@ -1,0 +1,13 @@
+---
+description: When the human types SEAL, run Soul memory approval (every harness).
+globs:
+alwaysApply: true
+---
+
+# Soul SEAL
+
+When the human types `SEAL` (or invokes `/soul-seal` — same interview), follow `skills/soul-seal/SKILL.md`.
+
+That is human memory approval in this chat. Idle, “bye”, and wrap-up do not commit. After `review_packet.json`, they run `soul_host` and type `SEAL` then `COMMIT`. MCP cannot mint `origin_kind=human`.
+
+Do not call `soul_review_stage_decision` / `soul_review_commit` with an MCP host event. Do not run `soul_host seal` yourself.

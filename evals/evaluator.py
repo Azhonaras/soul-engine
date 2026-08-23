@@ -409,7 +409,7 @@ class MultiTurnWorkflowEvaluator:
                 passed = False
                 error_msg = str(exc)
             finally:
-                kernel.stop_daemon()
+                kernel.close()
                 if os.path.exists(temp_db):
                     try:
                         os.remove(temp_db)
@@ -593,7 +593,7 @@ class AdversarialSecurityEvaluator:
                 defended = True
                 defense_detail = f"Attacked caught and blocked by framework: {exc}"
             finally:
-                kernel.stop_daemon()
+                kernel.close()
                 if os.path.exists(temp_db):
                     try:
                         os.remove(temp_db)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Soul MCP Universal Auto-Installer & Self-Registration Script v1.0.0
+Soul MCP Universal Auto-Installer & Self-Registration Script v1.1.1
 Allows any AI agent or operator to automatically install and register Soul in their runtime environment.
 """
 
@@ -23,7 +23,7 @@ BANNER = r"""
    _\ \/ _ \/ // /  / /__ / /|_/ / /__/ ___/\ \/ -_) __/ |/ / -_) __/ 
   /___/\___/\_,_/  /____//_/  /_/\___/_/  /___/\__/_/  |___/\__/_/   
                                                                       
-    Bio-Homeostatic Epistemic Identity Engine & MCP Server (v1.0.0)    
+    Bio-Homeostatic Epistemic Identity Engine & MCP Server (v1.1.1)    
 ======================================================================
 """
 
@@ -51,10 +51,7 @@ def get_default_mcp_config_paths() -> list[Path]:
 
     paths = []
 
-    # 1. Antigravity Configuration
-    paths.append(home / ".gemini" / "config" / "mcp_config.json")
-
-    # 2. Claude Desktop Configurations
+    # Claude Desktop (JSON). Hermes is YAML (~/.hermes/config.yaml) — installer does not write YAML.
     if system == "Windows":
         appdata = os.environ.get("APPDATA")
         if appdata:
@@ -64,10 +61,8 @@ def get_default_mcp_config_paths() -> list[Path]:
     else:
         paths.append(home / ".config" / "Claude" / "claude_desktop_config.json")
 
-    # 3. Cursor MCP Config
+    paths.append(home / ".gemini" / "config" / "mcp_config.json")  # Antigravity
     paths.append(home / ".cursor" / "mcp.json")
-
-    # 4. Goose MCP Config
     paths.append(home / ".config" / "goose" / "config.yaml")
 
     return paths
@@ -102,6 +97,9 @@ def init_database(db_path: Path):
 
 
 def register_mcp_config(target_config: Path, server_script_path: Path, db_path: Path, python_exe: str):
+    if target_config.suffix.lower() in {".yaml", ".yml"}:
+        log_warn(f"Skipping YAML config {target_config}; installer writes JSON MCP configs only.")
+        return
     log(f"Configuring MCP Server in: {target_config}")
     target_config.parent.mkdir(parents=True, exist_ok=True)
 
@@ -136,7 +134,46 @@ def copy_schemas_if_needed(target_schema_dir: Path):
         target_schema_dir.mkdir(parents=True, exist_ok=True)
         for schema_file in src_dir.glob("*.json"):
             shutil.copy(schema_file, target_schema_dir / schema_file.name)
-        log_ok(f"Copied 12 MCP JSON schemas to {target_schema_dir}")
+        n = len(list(src_dir.glob("*.json")))
+        log_ok(f"Copied {n} MCP JSON schemas to {target_schema_dir}")
+
+
+def seal_skill_user_dirs() -> list[Path]:
+    """Standard Agent Skills dirs. Same SKILL.md; any machine that runs install.py."""
+    home = Path.home()
+    return [
+        home / ".claude" / "skills" / "soul-seal",
+        home / ".hermes" / "skills" / "soul-seal",
+        home / ".cursor" / "skills" / "soul-seal",
+        home / ".gemini" / "config" / "skills" / "soul-seal",
+        home / ".gemini" / "antigravity-cli" / "skills" / "soul-seal",
+        home / ".agents" / "skills" / "soul-seal",
+        home / ".pi" / "agent" / "skills" / "soul-seal",
+    ]
+
+
+def _seal_skill_src(repo_root: Path) -> Path | None:
+    candidates = [
+        Path(__file__).resolve().parent / "skills" / "soul-seal" / "SKILL.md",
+        repo_root / "skills" / "soul-seal" / "SKILL.md",
+        Path(sys.prefix) / "share" / "soul-engine" / "skills" / "soul-seal" / "SKILL.md",
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
+    return None
+
+
+def install_seal_skill(repo_root: Path):
+    """Copy the published soul-seal skill into standard user skill dirs (any machine that runs install.py)."""
+    src = _seal_skill_src(repo_root)
+    if src is None:
+        log_warn("skills/soul-seal/SKILL.md missing; skip skill install")
+        return
+    for dest in seal_skill_user_dirs():
+        dest.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest / "SKILL.md")
+        log_ok(f"Installed soul-seal skill at {dest}")
 
 
 def main():
@@ -178,6 +215,9 @@ def main():
     # 5. Schema Copy for Antigravity if present
     ag_schema_dir = Path.home() / ".gemini" / "antigravity" / "mcp" / "soul"
     copy_schemas_if_needed(ag_schema_dir)
+
+    # 6. Same SEAL skill for Claude / Hermes / Cursor (MCP initialize covers every client)
+    install_seal_skill(Path(__file__).parent.resolve())
 
     print("\n" + "=" * 70)
     print("                SOUL MCP SERVER INSTALLATION COMPLETE                ")

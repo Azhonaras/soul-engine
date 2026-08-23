@@ -1,1 +1,1 @@
-{"name":"soul_digest","description":"Fetch a single compact summary block of core active facts and trait values.","parameters":{"properties":{"limit":{"default":5,"type":"integer"}},"type":"object"}}
+{"name":"soul_digest","description":"Compact traits + neuromodulators + reviewed facts. Unreviewed episodes are omitted.","parameters":{"properties":{"limit":{"default":5,"type":"integer"}},"type":"object"}}

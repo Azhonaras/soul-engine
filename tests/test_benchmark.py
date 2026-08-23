@@ -126,10 +126,7 @@ def run_soul_benchmark():
         print(f"  - Bound Violations Blocked: {bounds_caught}/1")
         print(f"  - Rollback Restored State : {'SUCCESS' if rollback_ok else 'FAILED'}")
 
-        # Close thread connection to release SQLite lock on Windows
-        if hasattr(kernel._local, "conn") and kernel._local.conn is not None:
-            kernel._local.conn.close()
-            kernel._local.conn = None
+        kernel.close()
         import gc
         gc.collect()
 

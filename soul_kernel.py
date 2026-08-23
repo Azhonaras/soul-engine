@@ -1,12 +1,12 @@
 """
-Soul System Core Kernel v1.0.0
-Normative Source: soul-constitution-v0.2.md & soul-system-architecture.json
+Soul System Core Kernel v1.1.1
+Normative Source: docs/CONSTITUTION.md & docs/ARCHITECTURE.md
 Features:
  1. Concurrency Hardening: BEGIN IMMEDIATE on writes, PRAGMA user_version migrations, and passive WAL checkpoints
  2. Two-Stage Epistemic Verification Pipeline with strict Epistemic Authority Hierarchy
- 3. Native SQLite FTS5 BM25 + Dense Vector Search with Over-Fetched RRF (Top-100 candidate pool)
+ 3. Native SQLite FTS5 BM25 + dense/hash vector search with Over-Fetched RRF (Top-100 candidate pool)
  4. Bio-Inspired Homeostatic Reward Engine (Dopamine / Cortisol / Serotonergic Decay)
- 5. Dedicated Protected Identity & Consolidated Memory schemas (Immutable Raw Episodes)
+ 5. Protected identity plus quarantine episodes; long-term is reviewed_memories after commit
  6. Supervised SoulDaemon Lifecycle with threading.Event() and error-resilience
 """
 
@@ -24,11 +24,8 @@ import datetime
 import logging
 import threading
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Literal, Set
+from typing import Any, Dict, List, Optional, Tuple, Literal
 from dataclasses import dataclass, field, asdict
-
-import warnings
-warnings.filterwarnings("ignore")
 
 # Optional Semantica Integration (silently isolate stdout for MCP stdio safety)
 try:
@@ -51,25 +48,17 @@ try:
 except (ImportError, Exception):
     HAS_SENTENCE_TRANSFORMERS = False
 
-SOUL_ENGINE_VERSION = "1.1.0"
+SOUL_ENGINE_VERSION = "1.1.1"
 CONSTITUTION_VERSION = "0.2"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
 
-import soul_review
 from soul_review import (
     SoulReviewEngine,
     sha256_digest,
-    compute_host_payload_hash,
-    compute_host_event_hash,
-    compute_candidate_hash,
-    compute_decision_hash,
-    compute_memory_content_hash,
     compute_memory_root,
     compute_system_state_hash,
-    compute_preview_hash,
     compute_receipt_hash,
     compute_audit_hash,
-    generate_salt
 )
 
 # ------------------------------------------------------------------------------
@@ -168,8 +157,11 @@ class BioHomeostaticRewardEngine:
         self.decay_rate = decay_rate
         self.dopamine = 0.0
         self.cortisol = 0.0
-        self.serotonin = 1.0
         self.stats = {"rewards_processed": 0, "homeostasis_steps": 0}
+
+    @property
+    def serotonin(self) -> float:
+        return round(1.0 - max(self.dopamine, self.cortisol), 4)
 
     def process_reward(self, signal: RewardSignal, current_traits: Dict[str, float]) -> Dict[str, float]:
         effective_delta = float(signal.valence) * float(signal.confidence)
@@ -227,7 +219,7 @@ class BioHomeostaticRewardEngine:
 # ML ENGINES: DENSE VECTOR, NLI & FTS5 BM25 SCORING
 # ------------------------------------------------------------------------------
 class VectorEmbeddingEngine:
-    """Computes dense vector representations with epsilon-floor normalized cosine similarity."""
+    """Dense vectors via sentence-transformers if installed, else a 384-d hash vector."""
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model = None
@@ -240,7 +232,8 @@ class VectorEmbeddingEngine:
     def embed(self, text: str) -> List[float]:
         if self.model:
             try:
-                return self.model.encode(text, convert_to_numpy=True).tolist()
+                vec = self.model.encode(text)
+                return vec.tolist() if hasattr(vec, "tolist") else list(vec)
             except Exception:
                 pass
         # Pure-Python Hashing / Term Vectorizer fallback (384-dimensional)
@@ -268,42 +261,54 @@ class VectorEmbeddingEngine:
 
 
 class NLIVerifierEngine:
-    """Evaluates semantic entailment and contradiction between premise and hypothesis."""
+    """Token-overlap heuristic (not a trained NLI model). Returns (entailment, contradiction) in [0, 1]."""
+
+    _NEGATION_MARKERS = {
+        "not", "never", "no", "longer", "stopped", "changed", "moved",
+        "quit", "away", "deleted", "relocated", "false", "wrong", "instead",
+        "differ", "contradict",
+    }
+    _STOPWORDS = {
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "to", "of", "in", "on", "at", "and", "or", "for", "with", "that",
+        "this", "it", "as", "by", "from", "user",
+    }
 
     def predict(self, premise: str, hypothesis: str) -> Tuple[float, float]:
         """Returns (entailment_score, contradiction_score) bounded in [0.0, 1.0]."""
-        prem_clean = premise.lower()
-        hyp_clean = hypothesis.lower()
+        prem_tokens = set(re.findall(r"\w+", premise.lower()))
+        hyp_tokens = set(re.findall(r"\w+", hypothesis.lower()))
 
-        negation_markers = {
-            "not", "never", "no", "longer", "stopped", "changed", "moved",
-            "quit", "away", "deleted", "relocated", "false", "wrong", "instead", "differ", "contradict"
-        }
-        prem_tokens = set(re.findall(r"\w+", prem_clean))
-        hyp_tokens = set(re.findall(r"\w+", hyp_clean))
-
-        has_negation = bool((hyp_tokens - prem_tokens) & negation_markers) or bool((prem_tokens - hyp_tokens) & negation_markers)
-        overlap = len(prem_tokens.intersection(hyp_tokens)) / max(1, len(prem_tokens.union(hyp_tokens)))
+        has_negation = bool(
+            (hyp_tokens - prem_tokens) & self._NEGATION_MARKERS
+            or (prem_tokens - hyp_tokens) & self._NEGATION_MARKERS
+        )
+        overlap = len(prem_tokens & hyp_tokens) / max(1, len(prem_tokens | hyp_tokens))
+        only_prem = (prem_tokens - hyp_tokens) - self._STOPWORDS - self._NEGATION_MARKERS
+        only_hyp = (hyp_tokens - prem_tokens) - self._STOPWORDS - self._NEGATION_MARKERS
 
         if has_negation and overlap > 0.12:
-            return (0.1, 0.90)  # High contradiction
+            return (0.1, 0.90)
+        # Same sentence frame with different content fillers (Python vs COBOL).
+        if overlap > 0.30 and only_prem and only_hyp:
+            return (0.1, 0.90)
         if overlap > 0.40:
-            return (0.85, 0.05) # High entailment
-        return (0.2, 0.1)      # Neutral
+            return (0.85, 0.05)
+        return (0.2, 0.1)
 
 
 # ------------------------------------------------------------------------------
-# CORE ENGINE: SOUL KERNEL v0.4.0
+# CORE ENGINE
 # ------------------------------------------------------------------------------
 class SoulKernel:
-    """Soul System v0.4 Core Engine with concurrency, bio-rewards, and epistemic hardening."""
+    """Local identity/memory kernel: quarantine, review, neuromodulators, SQLite ledger."""
 
     def __init__(self, db_path: str = "soul.db"):
         self.db_path = os.path.abspath(db_path)
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
         self._local = threading.local()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # ponytail: reentrant so record_host_event can nest under cycle open
 
         self.vector_engine = VectorEmbeddingEngine()
         self.nli_engine = NLIVerifierEngine()
@@ -321,6 +326,7 @@ class SoulKernel:
 
         self._init_sqlite()
         self._bootstrap_genesis_if_needed()
+        self._load_bio()
 
     def get_constitution_hash(self) -> str:
         const_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "CONSTITUTION.md")
@@ -336,6 +342,52 @@ class SoulKernel:
             conn.execute("PRAGMA busy_timeout=30000;")
             self._local.conn = conn
         return self._local.conn
+
+    def close_thread_conn(self) -> None:
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
+
+    def close(self) -> None:
+        self.stop_daemon()
+        self.close_thread_conn()
+
+    def _load_bio(self) -> None:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT dopamine, cortisol FROM neuromodulators ORDER BY soul_version DESC LIMIT 1;"
+            ).fetchone()
+            if not row:
+                row = conn.execute(
+                    "SELECT dopamine, cortisol FROM soul_states ORDER BY version DESC LIMIT 1;"
+                ).fetchone()
+        if row:
+            self.bio_engine.dopamine = float(row[0] or 0.0)
+            self.bio_engine.cortisol = float(row[1] or 0.0)
+
+    def _persist_bio(self, conn: sqlite3.Connection) -> None:
+        ver = conn.execute("SELECT MAX(version) FROM soul_states;").fetchone()[0]
+        if ver is None:
+            return
+        da = float(self.bio_engine.dopamine)
+        co = float(self.bio_engine.cortisol)
+        conn.execute(
+            """INSERT INTO neuromodulators (soul_version, dopamine, cortisol, serotonin, updated_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(soul_version) DO UPDATE SET
+                 dopamine = excluded.dopamine,
+                 cortisol = excluded.cortisol,
+                 serotonin = excluded.serotonin,
+                 updated_at = excluded.updated_at;""",
+            (
+                ver,
+                da,
+                co,
+                round(1.0 - max(da, co), 4),
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            ),
+        )
 
     def _init_sqlite(self):
         with self._lock, self._get_conn() as conn:
@@ -428,9 +480,33 @@ class SoulKernel:
 
                 ensure_col("soul_states", "constitution_hash TEXT")
                 ensure_col("soul_states", "prior_state_hash TEXT")
+                # v6 leftover columns; v7 source of truth is neuromodulators
+                ensure_col("soul_states", "dopamine REAL NOT NULL DEFAULT 0")
+                ensure_col("soul_states", "cortisol REAL NOT NULL DEFAULT 0")
 
                 ensure_col("audit_ledger", "previous_audit_hash TEXT")
                 ensure_col("audit_ledger", "audit_hash TEXT")
+
+                conn.execute("""
+                CREATE TABLE IF NOT EXISTS neuromodulators (
+                    soul_version INTEGER PRIMARY KEY,
+                    dopamine REAL NOT NULL DEFAULT 0,
+                    cortisol REAL NOT NULL DEFAULT 0,
+                    serotonin REAL NOT NULL DEFAULT 1,
+                    updated_at TEXT NOT NULL
+                );
+                """)
+                copied = conn.execute("SELECT COUNT(*) FROM neuromodulators;").fetchone()[0]
+                if copied == 0:
+                    conn.execute("""
+                    INSERT INTO neuromodulators (soul_version, dopamine, cortisol, serotonin, updated_at)
+                    SELECT version,
+                           COALESCE(dopamine, 0),
+                           COALESCE(cortisol, 0),
+                           ROUND(1.0 - MAX(COALESCE(dopamine, 0), COALESCE(cortisol, 0)), 4),
+                           created_at
+                    FROM soul_states;
+                    """)
 
                 # Schema v5 Review Tables
                 conn.executescript("""
@@ -641,6 +717,7 @@ class SoulKernel:
                 """, (CONSTITUTION_VERSION, traits_json, narrative, tensions_json, state_hash, created_at, const_hash))
 
                 self._record_audit(conn, 1, "genesis_bootstrap", {"traits": DEFAULT_TRAITS}, state_hash)
+                self._persist_bio(conn)
                 conn.commit()
 
     def _record_audit(self, conn: sqlite3.Connection, version: int, action_type: str, payload: dict, state_hash: str):
@@ -798,6 +875,7 @@ class SoulKernel:
                     VALUES (?, ?, ?, ?, ?, ?, ?);
                     """, (new_version, CONSTITUTION_VERSION, t_json, current_state.narrative, tens_json, s_hash, created_at))
 
+            self._persist_bio(conn)
             conn.commit()
 
         return {
@@ -1299,6 +1377,10 @@ class SoulKernel:
                 deletion_receipt_ref = ?
             WHERE id = ?;
             """, (now_iso, receipt_id, memory_id))
+            try:
+                cur.execute("DELETE FROM reviewed_memories_fts WHERE memory_id = ?;", (memory_id,))
+            except Exception:
+                pass
 
             # 2. Redact source episodes
             for ep_id in source_eps:
@@ -1486,6 +1568,7 @@ class SoulKernel:
             """, (new_version, CONSTITUTION_VERSION, traits_json, current.narrative, tensions_json, new_hash, created_at))
 
             self._record_audit(conn, new_version, "update_trait", {"update": asdict(update)}, new_hash)
+            self._persist_bio(conn)
             conn.commit()
 
         return self.get_current_state()
@@ -1513,6 +1596,7 @@ class SoulKernel:
             """, (new_version, CONSTITUTION_VERSION, traits_json, current.narrative, tensions_json, new_hash, created_at))
 
             self._record_audit(conn, new_version, "bio_reward", asdict(signal), new_hash)
+            self._persist_bio(conn)
             conn.commit()
 
         return self.get_current_state()
@@ -1539,6 +1623,7 @@ class SoulKernel:
                 """, (new_version, CONSTITUTION_VERSION, traits_json, current.narrative, tensions_json, new_hash, created_at))
 
                 self._record_audit(conn, new_version, "homeostasis_decay", {"traits": decayed_traits}, new_hash)
+            self._persist_bio(conn)
             conn.commit()
 
         return self.get_current_state()
@@ -1549,18 +1634,30 @@ class SoulKernel:
     def heal_soul_state(self, level: int = 1, reason: str = "Automated health repair") -> dict:
         if level == 1:
             state = self.get_current_state()
-            recalibrated = {}
+            new_traits = dict(state.traits)
             for trait, val in state.traits.items():
                 if trait in DEFAULT_TRAITS:
-                    def_val = DEFAULT_TRAITS[trait]
-                    recalibrated[trait] = round((val + def_val) / 2.0, 4)
+                    new_traits[trait] = round((val + DEFAULT_TRAITS[trait]) / 2.0, 4)
+            if new_traits == state.traits:
+                return {"level": 1, "status": "recalibrated", "reason": reason, "versions_written": 0}
 
-            for t, v in recalibrated.items():
-                try:
-                    self.update_trait(TraitUpdate(trait=t, new_value=v, evidence_refs=["heal_level_1"]))
-                except Exception:
-                    pass
-            return {"level": 1, "status": "recalibrated", "reason": reason}
+            with self._lock, self._get_conn() as conn:
+                conn.execute("BEGIN IMMEDIATE;")
+                current = self._get_current_state_from_conn(conn)
+                new_version = current.soul_version + 1
+                created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                traits_json = json.dumps(new_traits)
+                tensions_json = json.dumps(current.unresolved_tensions)
+                raw_payload = f"{new_version}|{CONSTITUTION_VERSION}|{traits_json}|{current.narrative}|{tensions_json}|{created_at}"
+                new_hash = hashlib.sha256(raw_payload.encode()).hexdigest()
+                conn.execute("""
+                INSERT INTO soul_states (version, constitution_version, traits_json, narrative, unresolved_tensions_json, state_hash, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """, (new_version, CONSTITUTION_VERSION, traits_json, current.narrative, tensions_json, new_hash, created_at))
+                self._record_audit(conn, new_version, "heal_level_1", {"reason": reason, "traits": new_traits}, new_hash)
+                self._persist_bio(conn)
+                conn.commit()
+            return {"level": 1, "status": "recalibrated", "reason": reason, "versions_written": 1}
 
         elif level == 2:
             current = self.get_current_state()
@@ -1583,6 +1680,16 @@ class SoulKernel:
             if not row:
                 raise ValueError(f"Rollback target version {target_version} does not exist.")
 
+            bio = cur.execute(
+                "SELECT dopamine, cortisol FROM neuromodulators WHERE soul_version = ?;",
+                (target_version,),
+            ).fetchone()
+            if not bio:
+                bio = cur.execute(
+                    "SELECT dopamine, cortisol FROM soul_states WHERE version = ?;",
+                    (target_version,),
+                ).fetchone()
+
             conn.execute("BEGIN IMMEDIATE;")
             current = self._get_current_state_from_conn(conn)
             new_version = current.soul_version + 1
@@ -1596,7 +1703,10 @@ class SoulKernel:
             VALUES (?, ?, ?, ?, ?, ?, ?);
             """, (new_version, row[0], row[1], row[2], row[3], new_hash, created_at))
 
+            self.bio_engine.dopamine = float((bio[0] if bio else 0.0) or 0.0)
+            self.bio_engine.cortisol = float((bio[1] if bio else 0.0) or 0.0)
             self._record_audit(conn, new_version, "rollback", {"target_version": target_version, "reason": operator_reason}, new_hash)
+            self._persist_bio(conn)
             conn.commit()
 
         return self.get_current_state()
@@ -1683,41 +1793,34 @@ class SoulDaemon:
         last_heal = time.time()
         last_homeostasis = time.time()
         last_checkpoint = time.time()
-
-        while not self.stop_event.is_set():
-            now = time.time()
-            try:
-                # 1. Passive WAL Checkpoint every 120s
-                if now - last_checkpoint >= 120:
-                    with self.kernel._get_conn() as conn:
-                        conn.execute("PRAGMA wal_checkpoint(PASSIVE);")
-                    self.stats["checkpoints_run"] += 1
-                    last_checkpoint = now
-
-                # 2. Homeostatic serotonergic decay
-                if now - last_homeostasis >= self.homeostasis_interval:
-                    self.kernel.step_homeostasis()
-                    self.stats["homeostasis_runs"] += 1
-                    last_homeostasis = now
-
-                # 3. Dream simulation
-                if now - last_dream >= self.dream_interval:
-                    self.kernel.run_dream_simulation("Routine background scenario simulation")
-                    self.stats["dreams_run"] += 1
-                    self.stats["last_dream"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    last_dream = now
-
-                # 4. Periodic Level-1 recalibration
-                if now - last_heal >= self.heal_interval:
-                    self.kernel.heal_soul_state(level=1, reason="Daemon periodic recalibration")
-                    self.stats["heals_run"] += 1
-                    self.stats["last_heal"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    last_heal = now
-
-            except Exception as exc:
-                self.stats["error_count"] += 1
-                self.stats["last_error"] = str(exc)
-                logging.error(f"[SoulDaemonSupervisor] Error in maintenance cycle: {exc}", exc_info=True)
-                time.sleep(min(30.0, 2.0 ** min(5, self.stats["error_count"])))
-
-            time.sleep(1)
+        try:
+            while not self.stop_event.is_set():
+                now = time.time()
+                try:
+                    if now - last_checkpoint >= 120:
+                        with self.kernel._get_conn() as conn:
+                            conn.execute("PRAGMA wal_checkpoint(PASSIVE);")
+                        self.stats["checkpoints_run"] += 1
+                        last_checkpoint = now
+                    if now - last_homeostasis >= self.homeostasis_interval:
+                        self.kernel.step_homeostasis()
+                        self.stats["homeostasis_runs"] += 1
+                        last_homeostasis = now
+                    if now - last_dream >= self.dream_interval:
+                        self.kernel.run_dream_simulation("Routine background scenario simulation")
+                        self.stats["dreams_run"] += 1
+                        self.stats["last_dream"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        last_dream = now
+                    if now - last_heal >= self.heal_interval:
+                        self.kernel.heal_soul_state(level=1, reason="Daemon periodic recalibration")
+                        self.stats["heals_run"] += 1
+                        self.stats["last_heal"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        last_heal = now
+                except Exception as exc:
+                    self.stats["error_count"] += 1
+                    self.stats["last_error"] = str(exc)
+                    logging.error(f"[SoulDaemonSupervisor] Error in maintenance cycle: {exc}", exc_info=True)
+                    time.sleep(min(30.0, 2.0 ** min(5, self.stats["error_count"])))
+                time.sleep(1)
+        finally:
+            self.kernel.close_thread_conn()

@@ -174,7 +174,7 @@ input
 → evidence and contradiction checks
 → identity-impact assessment
 → Dream-phase adversarial test when consequential
-→ promote, retain in quarantine, or delete
+→ promote via review commit (reviewed_memories), retain in quarantine, or delete
 ```
 
 ### 8.1 Required provenance classes
@@ -194,12 +194,14 @@ Provenance may be extended but never silently upgraded or removed.
 Keep separate stores for:
 
 - public knowledge;
-- quarantined episodes;
-- verified autobiographical memory;
+- quarantined episodes (`episodes`; not default recall);
+- reviewed autobiographical memory (`reviewed_memories` after human commit);
 - interpretations;
 - identity-changing proposals;
-- Dream outputs;
+- Dream outputs (`imagined`);
 - audit and rollback history.
+
+Default `soul_recall` / digest use reviewed memory only.
 
 Raw hostile input cannot directly alter traits or identity narrative.
 

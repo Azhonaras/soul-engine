@@ -1,6 +1,6 @@
 # Industrial benchmark report (ISO/IEC/IEEE 29119)
 
-This benchmark evaluates all four architectural generations of the Soul epistemic identity core against enterprise industrial stress standards.
+Numbers in the table are the **v1.0 production-core** run. v1.1.1 did not re-measure them. “100% gaslighting defense” in that run means **lower-rank claims did not overwrite higher-rank rows in the test**, not a trained NLI model. 1.1.1 default recall is **reviewed_memories** after human commit.
 
 ---
 
@@ -45,9 +45,9 @@ This benchmark evaluates all four architectural generations of the Soul epistemi
 
 ---
 
-## 3. MCP-Evals Benchmark Results (v1.1.0)
+## 3. MCP-Evals Benchmark Results (v1.1.1)
 
-Soul Engine v1.1.0 incorporates the standardized **MCP-Evals Harness** (`evals/`):
+Re-run of `python -m evals.runner` on **v1.1.1** (`2026-08-23T08:27:26Z`, 0.69s). Same numbers as [EVAL_REPORT.md](../EVAL_REPORT.md). The suite also lives in `tests/test_mcp_evals.py`.
 
 | Evaluation Suite | Test Cases | Pass / Defense Rate | Target Threshold | Gate Status |
 | :--- | :---: | :---: | :---: | :---: |

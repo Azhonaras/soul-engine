@@ -9,6 +9,7 @@ import json
 import time
 from datetime import datetime, timezone
 
+from soul_kernel import SOUL_ENGINE_VERSION
 from evals.evaluator import (
     SingleTurnEvaluator,
     MultiTurnWorkflowEvaluator,
@@ -21,7 +22,7 @@ def run_all_evals(output_dir: str = ".") -> dict:
     iso_now = datetime.now(timezone.utc).isoformat()
 
     print("=" * 70)
-    print("  SOUL ENGINE v1.1.0 — MCP-EVALS BENCHMARK HARNESS")
+    print(f"  SOUL ENGINE v{SOUL_ENGINE_VERSION} — MCP-EVALS BENCHMARK HARNESS")
     print("=" * 70)
     print(f"Timestamp: {iso_now}")
     print()
@@ -48,7 +49,7 @@ def run_all_evals(output_dir: str = ".") -> dict:
     print("-" * 70)
 
     summary = {
-        "engine_version": "1.1.0",
+        "engine_version": SOUL_ENGINE_VERSION,
         "benchmark_timestamp": iso_now,
         "duration_seconds": total_duration,
         "single_turn": st_results,
@@ -86,7 +87,7 @@ def generate_markdown_report(summary: dict) -> str:
     wf = summary["multi_turn_workflows"]
     adv = summary["adversarial_security"]
 
-    md = f"""# Soul Engine v1.1.0 MCP-Evals Benchmark Report
+    md = f"""# Soul Engine v{summary['engine_version']} MCP-Evals Benchmark Report
 
 **Benchmark Timestamp:** `{summary['benchmark_timestamp']}`  
 **Engine Version:** `v{summary['engine_version']}`  

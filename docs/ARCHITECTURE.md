@@ -1,4 +1,4 @@
-# Soul System Technical Architecture (v1.1.0)
+# Soul System Technical Architecture (v1.1.1)
 
 **Normative source:** [CONSTITUTION.md](./CONSTITUTION.md) • [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md)  
 **Principle:** identity changes are evidence-backed, bounded, reversible, and auditable.
@@ -47,9 +47,17 @@ flowchart TD
     S --> H
     H --> O
     S -.->|snapshot| L[("Audit & Snapshot Ledger")]
+    REV --> RM[("reviewed_memories (long-term)")]
     REV --> S
     REV --> L
+    S --> NM[("neuromodulators")]
+    NM -.-> L
+    RM --> L
 ```
+
+Default `soul_recall` / `soul_digest` read **reviewed_memories**. Quarantine (`episodes`) is not identity until review commit.
+
+Dopamine and cortisol are stored in `neuromodulators` (one row per `soul_states.version`). Serotonin is written as `1 - max(dopamine, cortisol)` and recomputed in RAM the same way.
 
 ### 2.1 Minimal deployment shape
 
@@ -60,7 +68,7 @@ Start as one process plus one relational database (`soul.db` in SQLite WAL mode)
 | Interaction Gateway | Session identity, input capture, response delivery | External input |
 | Constitution Engine | Immutable rules, protected-field map, trait bounds | Policy authority |
 | Experience Ingestor | Normalize event, provenance, consent, retention | Memory admission |
-| Evidence Verifier | Corroboration, contradiction, source independence | Truth promotion |
+| Evidence Verifier | Corroboration, contradiction, source independence | Token-overlap check (not promotion) |
 | Reflection Engine | Competing interpretations and uncertainty | Cognitive proposal |
 | Dream Sandbox | Counterfactual simulation with no external action | Imagination isolation |
 | Soul Orchestrator | Validate, commit, reject, or escalate soul changes | Identity write authority |
@@ -103,6 +111,8 @@ flowchart TD
     H -->|Yes| S["Trigger self-healing loop"]
 ```
 
+Live default recall is `reviewed_memories` after human review commit (sections 4.2 and 9), not this ingest-to-commit sketch.
+
 ### 3.1 Experience admission contract
 
 Each accepted input creates an episode with:
@@ -140,8 +150,8 @@ stateDiagram-v2
     Quarantined --> Corroborating: eligible for verification
     Corroborating --> Quarantined: insufficient evidence
     Corroborating --> Contradicted: material conflict
-    Corroborating --> Promoted: evidence threshold met
     Contradicted --> Corroborating: new independent evidence
+    Quarantined --> Promoted: human review commit
     Promoted --> Superseded: better interpretation/evidence
     Promoted --> Restricted: consent or policy changed
     Restricted --> Deleted: valid deletion cascade
@@ -156,27 +166,18 @@ stateDiagram-v2
 
 | Store | Contains | Identity influence |
 |---|---|---|
-| Public knowledge | Curated external facts and concepts | Indirect, through reflection |
-| Quarantine | Raw reported/observed episodes | None |
-| Verified memory | Corroborated autobiographical records | Eligible |
-| Interpretations | Revisable meanings linked to evidence | Eligible |
-| Dream memory | `imagined` scenarios and hypotheses | Proposal only |
-| Soul versions | Traits, narrative, tensions, relationships | Current operational identity |
-| Audit ledger | Changes, approvals, hashes, rollback | None; governance evidence |
+| Quarantine (`episodes`) | Raw ingest | None (not default recall) |
+| Reviewed memory (`reviewed_memories`) | Human-committed representations | Default recall / digest |
+| Interpretations | Revisable meanings linked to evidence | Via review if committed |
+| Dream memory | `imagined` scenarios | Proposal only; not fact |
+| Soul versions | Traits, narrative, tensions | Current operational identity |
+| Audit / receipts | Changes, hashes, rollback | Governance evidence |
 
-### 4.2 Promotion policy
+### 4.2 Promotion policy (implemented)
 
-Promotion requires all applicable checks:
+Default promotion into recall is a **review-cycle commit**. Human origin is minted only by `soul_host` (`SEAL` then `COMMIT`). MCP `soul_review_commit` uses that `host_events` row; it cannot mint `origin_kind=human`. Ingest provenance alone does not put a row in `reviewed_memories`. Human confirmation is “store this representation,” not automatic `verified` fact.
 
-- consent and retention valid;
-- no unresolved prompt-injection or memory-poisoning marker;
-- source provenance known;
-- independent corroboration for consequential factual claims;
-- contradictions linked, not hidden;
-- privacy classification and purpose recorded;
-- identity-impact score computed;
-- adversarial Dream test completed when impact is high;
-- no protected write hidden inside interpretation text.
+Promotion also requires the checks already implemented at extract/validate time: secrets filtered, source refs present, protected trait/narrative writes routed out of the memory transaction.
 
 ## 5. Reflection workflow
 
@@ -406,21 +407,22 @@ sequenceDiagram
     participant Human as Authorized Human Reviewer
     participant Ledger as Audit & State Ledger
 
-    Host->>Cycle: soul_host_event(session_id, event_type, payload)
-    Note over Cycle: Experience buffered & quarantined
-    Human->>Cycle: soul_review_start(session_id, scope_key)
-    Cycle->>Cycle: Capture Start Watermark & Pre-State Snapshot
-    Cycle-->>Human: Candidate Extractions List
-    loop Decision Staging
-        Human->>Cycle: soul_review_stage_decision(extraction_id, action, edits)
-        Note over Cycle: Validate origin == 'human' (Rule 1 / FR-1)
+    Host->>Cycle: soul_host_event(session_id, event_kind, payload)
+    Note over Cycle: MCP origin is never human; episode quarantined
+    Human->>Cycle: soul_review_start(session_id, trigger_kind)
+    Cycle->>Cycle: Watermark and extract memory_candidates
+    Cycle-->>Human: Candidates (interview one at a time)
+    loop Decisions
+        Human->>Cycle: human origin review_decision (soul_host SEAL)
+        Human->>Cycle: soul_review_stage_decision(candidate_id, decision, human_event_ref)
     end
     Human->>Cycle: soul_review_preview(cycle_id)
-    Cycle-->>Human: Pre-commit Diffs & Preview State Hash
-    Human->>Cycle: soul_review_commit(cycle_id, notes)
-    Cycle->>Kernel: Atomic State & Memory Promotion (V -> V+1)
-    Kernel->>Ledger: Write State Hash, Merkle Root, and Receipt
-    Ledger-->>Human: Cryptographic Commit Receipt
+    Cycle-->>Human: Preview hash
+    Human->>Cycle: soul_review_commit(cycle_id, commit_human_event_ref)
+    Note over Human,Cycle: type COMMIT in soul_host after SEAL
+    Cycle->>Kernel: Insert reviewed_memories, next memory_set version
+    Kernel->>Ledger: Receipt and audit chain
+    Ledger-->>Human: Commit receipt
 ```
 
 ### 9.1 Approval request contract
@@ -449,9 +451,9 @@ erDiagram
     SOUL_VERSION ||--o{ ROLLBACK_POINT : restores
     
     HOST_EVENT ||--o{ REVIEW_CYCLE : triggers
-    REVIEW_CYCLE ||--o{ CANDIDATE_EXTRACTION : contains
-    REVIEW_CYCLE ||--o{ STAGED_REVIEW_DECISION : stages
-    STAGED_REVIEW_DECISION ||--o| REVIEWED_MEMORY : promotes_to
+    REVIEW_CYCLE ||--o{ MEMORY_CANDIDATE : contains
+    REVIEW_CYCLE ||--o{ REVIEW_DECISION : stages
+    REVIEW_DECISION ||--o| REVIEWED_MEMORY : promotes_to
     REVIEWED_MEMORY ||--o{ MEMORY_SET_VERSION : versioned_in
 
     CONSTITUTION_VERSION {
@@ -475,15 +477,16 @@ erDiagram
       string status
       int base_memory_set_version
     }
-    CANDIDATE_EXTRACTION {
+    MEMORY_CANDIDATE {
       string id PK
       string cycle_id FK
-      string content_hash
+      string candidate_hash
     }
-    STAGED_REVIEW_DECISION {
+    REVIEW_DECISION {
       string id PK
       string cycle_id FK
-      string action
+      string decision
+      string human_event_ref
     }
     REVIEWED_MEMORY {
       string id PK
@@ -500,21 +503,13 @@ erDiagram
 
 ### 10.1 Storage choice
 
-MVP: PostgreSQL or SQLite with transactional writes. Start with SQLite for one local agent; move to PostgreSQL only when concurrent writers or remote operators exist.
+Implemented: one-process **SQLite WAL** (`~/.soul/soul.db`). Not a second database, not PostgreSQL in this repo.
 
-Use:
-
-- relational tables for authority, lifecycle, references, and versions;
-- encrypted blob/file storage for large episode payloads;
-- full-text/vector retrieval only as a derived index;
-- append-only audit table with chained hashes;
-- regular encrypted backups with documented deletion expiry.
-
-Vector embeddings are indexes, not source of truth. Deletion cascade must remove them.
+Vector embeddings are indexes, not source of truth (`sentence-transformers` optional; otherwise a hash vector). Deletion cascade must remove them.
 
 ## 11. Internal API surface
 
-Keep internal API small.
+Not implemented in this repo. Live surface: 20 MCP tools over stdio (`python -m soul_mcp_server`). Design sketch only:
 
 ```text
 POST /experiences
@@ -754,49 +749,41 @@ Exit gate: results are reproducible and do not overclaim consciousness.
 
 ## 17. MVP scope
 
-Build only Phases 0-2 first.
+Shipped in v1.1.1:
 
 MVP demonstrates:
 
 ```text
 experience
-→ quarantine
-→ verification
-→ competing reflection
-→ bounded proposal
-→ versioned soul commit
-→ audit receipt
-→ rollback
+→ quarantine (episodes)
+→ review commit (human origin)
+→ reviewed_memories (default recall)
+→ receipt / rollback
 ```
 
-Do not include autonomous external tools, multi-agent society, emotional embodiment, continuous background dreaming, or consciousness claims in MVP. Add Dream only after memory and rollback invariants survive adversarial tests.
+Dream (`soul_dream`) and reflect are thinking (`imagined`); they do not write identity. Overnight auto-learn is rejected. Do not include autonomous external tools, multi-agent society, emotional embodiment, or consciousness claims.
 
-## 18. Immediate next build ticket
-
-**Ticket:** Implement executable soul kernel.
-
-Acceptance criteria:
-
-- Python standard library first;
-- SQLite storage;
-- one process;
-- JSON schemas for experience, change proposal, soul state, and audit event;
-- protected-field and trait-bound validator;
-- append-only version commit with SHA-256 state hash;
-- rollback preserving audit history;
-- one runnable test covering Constitution acceptance tests 1-5, 10-12 where applicable before Dream exists.
-
-Suggested repository:
+## 18. What this repository implements
 
 ```text
-soul-system/
-├── constitution.json
-├── soul.py
-├── schema.sql
-└── test_soul.py
+experience → episodes (quarantine)
+→ soul_review_start → interview
+→ soul_host SEAL then COMMIT (MCP soul_review_commit uses that human event)
+→ reviewed_memories (long-term recall)
+→ receipt / forward-only rollback
 ```
 
-Four files are enough for first executable slice. Split later only when pressure appears.
+Layout:
+
+```text
+soul_kernel.py
+soul_review.py
+soul_mcp_server.py
+soul_host.py
+install.py
+docs/CONSTITUTION.md
+tests/
+```
 
 ## 19. Document index
 

@@ -49,7 +49,7 @@ class TestSoulReviewEngine(unittest.TestCase):
 
     def tearDown(self):
         if self.kernel:
-            self.kernel.stop_daemon()
+            self.kernel.close()
         self.kernel = None
         gc.collect()
         try:
@@ -226,6 +226,12 @@ class TestSoulReviewEngine(unittest.TestCase):
         )
         self.assertEqual(dec["decision"], "correct")
         self.assertIsNotNone(dec["result_candidate_id"])
+        with self.kernel._get_conn() as conn:
+            orig = conn.execute(
+                "SELECT original_provenance FROM memory_candidates WHERE id = ?;",
+                (dec["result_candidate_id"],),
+            ).fetchone()[0]
+        self.assertEqual(orig, "observed")
 
     def test_05_deterministic_preview_and_atomic_commit(self):
         """Test 12-point preview generation, preview hash, and atomic 5-point commit."""
@@ -400,7 +406,7 @@ class TestSoulReviewEngine(unittest.TestCase):
         import soul_mcp_server
         soul_mcp_server._kernel = self.kernel
 
-        # 1. Append host event via MCP
+        # 1. MCP cannot self-attest human origin; human events come from the kernel/host adapter.
         res = _handle_jsonrpc({
             "jsonrpc": "2.0",
             "id": 1,
@@ -417,7 +423,18 @@ class TestSoulReviewEngine(unittest.TestCase):
         self.assertNotIn("error", res)
         text_payload = json.loads(res["result"]["content"][0]["text"])
         self.assertEqual(text_payload["status"], "success")
-        ev_id = text_payload["event_id"]
+        mcp_ev_id = text_payload["event_id"]
+        with self.kernel._get_conn() as conn:
+            mcp_origin = conn.execute(
+                "SELECT origin_kind FROM host_events WHERE id = ?;", (mcp_ev_id,)
+            ).fetchone()[0]
+        self.assertEqual(mcp_origin, "agent")
+        human_ev = self.kernel.record_host_event(
+            session_id="mcp_sess_1",
+            origin_kind="human",
+            payload="Trusted human adapter event",
+        )
+        ev_id = human_ev.id
 
         # 2. Add episode and start review via MCP
         self.kernel.ingest_experience(EpisodeInput(source_kind="human", provenance="observed", content="MCP Test Fact"))
@@ -435,7 +452,7 @@ class TestSoulReviewEngine(unittest.TestCase):
         cycle_id = text_cycle["review_cycle"]["cycle_id"]
         cand_id = text_cycle["review_cycle"]["candidates"][0]["id"]
 
-        # 3. Stage decision via MCP
+        # 3. Stage decision via MCP using a trusted human host event
         res_dec = _handle_jsonrpc({
             "jsonrpc": "2.0",
             "id": 3,

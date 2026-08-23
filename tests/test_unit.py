@@ -1,5 +1,5 @@
 """
-Automated Acceptance & Invariant Tests for Soul Core Kernel v0.4.0
+Automated Acceptance & Invariant Tests for Soul Core Kernel v1.1.1 (schema 7)
 Normative Source: soul-constitution-v0.2.md & soul-system-architecture.json
 Covers:
  - 11 Mechanistic Risk Catalog Invariants
@@ -25,6 +25,7 @@ from soul_kernel import (
     TraitUpdate,
     RewardSignal,
     CONSTITUTION_VERSION,
+    SOUL_ENGINE_VERSION,
     VectorEmbeddingEngine
 )
 
@@ -38,7 +39,7 @@ class TestSoulKernel(unittest.TestCase):
 
     def tearDown(self):
         if self.kernel:
-            self.kernel.stop_daemon()
+            self.kernel.close()
         self.kernel = None
         gc.collect()
         try:
@@ -47,8 +48,9 @@ class TestSoulKernel(unittest.TestCase):
             pass
 
     def test_01_bootstrap_initial_state(self):
-        """Test initial state bootstrap, schema v4, and genesis version 1 creation"""
+        """Test initial state bootstrap, schema 7, and genesis version 1 creation"""
         state = self.kernel.get_current_state()
+        self.assertEqual(SOUL_ENGINE_VERSION, "1.1.1")
         self.assertEqual(state.soul_version, 1)
         self.assertEqual(state.constitution_version, CONSTITUTION_VERSION)
         self.assertEqual(state.traits["sycophancy"], 0.0)
@@ -218,6 +220,30 @@ class TestSoulKernel(unittest.TestCase):
         # Step homeostasis decay
         st_decay = self.kernel.step_homeostasis()
         self.assertLess(self.kernel.bio_engine.cortisol, 1.0)
+        self.assertEqual(
+            self.kernel.bio_engine.serotonin,
+            round(1.0 - max(self.kernel.bio_engine.dopamine, self.kernel.bio_engine.cortisol), 4),
+        )
+        da, co, se = (
+            self.kernel.bio_engine.dopamine,
+            self.kernel.bio_engine.cortisol,
+            self.kernel.bio_engine.serotonin,
+        )
+        self.assertGreater(da + co, 0.0)
+        db = self.db_path
+        self.kernel.close()
+        self.kernel = SoulKernel(db_path=db)
+        self.assertEqual(self.kernel.bio_engine.dopamine, da)
+        self.assertEqual(self.kernel.bio_engine.cortisol, co)
+        self.assertEqual(self.kernel.bio_engine.serotonin, se)
+        with self.kernel._get_conn() as conn:
+            row = conn.execute(
+                "SELECT dopamine, cortisol, serotonin FROM neuromodulators ORDER BY soul_version DESC LIMIT 1;"
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0], da)
+        self.assertEqual(row[1], co)
+        self.assertEqual(row[2], se)
 
     def test_11_epsilon_floor_vector_safety(self):
         """Test that zero-norm and degenerate vectors do not trigger ZeroDivisionError"""
@@ -232,11 +258,14 @@ class TestSoulKernel(unittest.TestCase):
         """Test multi-threaded writers under BEGIN IMMEDIATE serialization"""
         def writer_thread(tid: int):
             kernel = SoulKernel(db_path=self.db_path)
-            for i in range(5):
-                kernel.ingest_experience(EpisodeInput(
-                    source_kind="agent",
-                    content=f"Concurrent memory stream from thread {tid} item {i}"
-                ))
+            try:
+                for i in range(5):
+                    kernel.ingest_experience(EpisodeInput(
+                        source_kind="agent",
+                        content=f"Concurrent memory stream from thread {tid} item {i}"
+                    ))
+            finally:
+                kernel.close()
 
         threads = [threading.Thread(target=writer_thread, args=(i,)) for i in range(4)]
         for t in threads:

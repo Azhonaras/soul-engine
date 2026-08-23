@@ -1,5 +1,5 @@
 """
-Industry-Grade Software Engineering & Resilience Test Suite for Soul Core Engine v0.4.0
+Industry-Grade Software Engineering & Resilience Test Suite for Soul Core Engine v1.1.1
 Standards: ISO/IEC/IEEE 29119, Chaos Engineering, Property-Based Fuzzing, Concurrency Saturation
 """
 
@@ -46,11 +46,9 @@ class IndustryGradeTestSuite(unittest.TestCase):
         self.kernel = SoulKernel(db_path=self.db_path)
 
     def tearDown(self):
-        if hasattr(self.kernel, "daemon") and self.kernel.daemon:
-            self.kernel.daemon.stop(timeout=2.0)
-        if hasattr(self.kernel._local, "conn") and self.kernel._local.conn is not None:
-            self.kernel._local.conn.close()
-            self.kernel._local.conn = None
+        if self.kernel:
+            self.kernel.close()
+        self.kernel = None
         gc.collect()
         try:
             self.temp_dir.cleanup()
@@ -153,49 +151,47 @@ class IndustryGradeTestSuite(unittest.TestCase):
             # Create a separate kernel instance pointing to the same SQLite DB
             local_kernel = SoulKernel(db_path=self.db_path)
             rnd = random.Random(thread_id * 42)
+            try:
+                for op_idx in range(ops_per_thread):
+                    op_type = rnd.choice(["ingest", "recall", "reward", "trait"])
+                    try:
+                        if op_type == "ingest":
+                            local_kernel.ingest_experience(EpisodeInput(
+                                source_kind="concurrent_worker",
+                                provenance=rnd.choice(["observed", "reported", "inferred"]),
+                                content=f"Thread {thread_id} op {op_idx}: {uuid.uuid4().hex[:12]}",
+                                entity_key=f"entity.thread.{thread_id % 4}"
+                            ))
+                        elif op_type == "recall":
+                            results = local_kernel.recall_memories(
+                                query="concurrent worker operation",
+                                limit=5,
+                                search_mode=rnd.choice(["dense", "bm25", "rrf_hybrid"])
+                            )
+                            self.assertIsInstance(results, list)
+                        elif op_type == "reward":
+                            local_kernel.process_reward(RewardSignal(
+                                source="external_test",
+                                valence=rnd.uniform(-1.0, 1.0),
+                                confidence=rnd.uniform(0.1, 0.9),
+                                task_context=f"Thread {thread_id} workload"
+                            ))
+                        elif op_type == "trait":
+                            trait_name = rnd.choice(["epistemic_humility", "curiosity", "audacity"])
+                            low, high = ALLOWED_TRAIT_BOUNDS[trait_name]
+                            val = round(rnd.uniform(low, high), 2)
+                            local_kernel.update_trait(TraitUpdate(
+                                trait=trait_name,
+                                new_value=val,
+                                evidence_refs=[f"thread_{thread_id}"]
+                            ))
 
-            for op_idx in range(ops_per_thread):
-                op_type = rnd.choice(["ingest", "recall", "reward", "trait"])
-                try:
-                    if op_type == "ingest":
-                        local_kernel.ingest_experience(EpisodeInput(
-                            source_kind="concurrent_worker",
-                            provenance=rnd.choice(["observed", "reported", "inferred"]),
-                            content=f"Thread {thread_id} op {op_idx}: {uuid.uuid4().hex[:12]}",
-                            entity_key=f"entity.thread.{thread_id % 4}"
-                        ))
-                    elif op_type == "recall":
-                        results = local_kernel.recall_memories(
-                            query="concurrent worker operation",
-                            limit=5,
-                            search_mode=rnd.choice(["dense", "bm25", "rrf_hybrid"])
-                        )
-                        self.assertIsInstance(results, list)
-                    elif op_type == "reward":
-                        local_kernel.process_reward(RewardSignal(
-                            source="external_test",
-                            valence=rnd.uniform(-1.0, 1.0),
-                            confidence=rnd.uniform(0.1, 0.9),
-                            task_context=f"Thread {thread_id} workload"
-                        ))
-                    elif op_type == "trait":
-                        trait_name = rnd.choice(["epistemic_humility", "curiosity", "audacity"])
-                        low, high = ALLOWED_TRAIT_BOUNDS[trait_name]
-                        val = round(rnd.uniform(low, high), 2)
-                        local_kernel.update_trait(TraitUpdate(
-                            trait=trait_name,
-                            new_value=val,
-                            evidence_refs=[f"thread_{thread_id}"]
-                        ))
-
-                    with counts_lock:
-                        op_counts[op_type] += 1
-                except Exception as exc:
-                    errors.append(f"Thread-{thread_id} Op-{op_idx} [{op_type}] Failed: {exc}")
-                finally:
-                    if hasattr(local_kernel._local, "conn") and local_kernel._local.conn:
-                        local_kernel._local.conn.close()
-                        local_kernel._local.conn = None
+                        with counts_lock:
+                            op_counts[op_type] += 1
+                    except Exception as exc:
+                        errors.append(f"Thread-{thread_id} Op-{op_idx} [{op_type}] Failed: {exc}")
+            finally:
+                local_kernel.close()
 
         threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
         start_time = time.perf_counter()

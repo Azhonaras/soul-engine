@@ -1,0 +1,48 @@
+Soul Engine bugfixes (v1.1.1)
+=============================
+
+Extra tests and notes for the 1.1.1 review-cycle / MCP gates. Fixes live in the modules listed below.
+
+Patched files
+-------------
+  soul_kernel.py
+  soul_review.py
+  soul_mcp_server.py
+  soul_host.py
+  install.py
+  setup.py
+  pyproject.toml
+  requirements.txt
+  schemas/soul_rollback.json
+  schemas/soul_heal.json
+  .github/dependabot.yml
+
+What was fixed
+--------------
+1. MCP soul_rollback / soul_heal had no human gate (agent could rewind identity).
+   Now both require human_event_ref with origin_kind=human, same as review commit.
+2. heal_soul_state(level=1) wrote one soul_states row per trait (7 versions).
+   Now one write, or zero if already at setpoints. Daemon heal no longer inflates history.
+3. decision=session_only / keep_both_with_context / keep_old were preview/commit no-ops.
+4. record_host_event defaulted event_kind to "user_input" (not in EventKind).
+5. Host-event inserts were unlocked; concurrent same-session writes could fork the hash chain.
+   RLock + lock around record_host_event. Nested cycle-open stays legal.
+6. Thread-local SQLite connections never closed (Windows file locks / ResourceWarning).
+   SoulKernel.close() / close_thread_conn(); daemon closes its conn on stop.
+7. install.py json.dump'd Goose config.yaml and corrupted it. YAML paths are skipped.
+8. Unused numpy hard-dep (and convert_to_numpy). Removed.
+9. warnings.filterwarnings("ignore") hid real errors. Removed.
+10. Dead imports (Protocol, unused hash helpers, unused soul_review module import).
+11. Dead compute_host_payload_hash (never called). Removed.
+12. Human `correct` no longer stamps provenance `verified` (keeps the candidate's original provenance).
+13. Unittest tearDowns and worker kernels call close(); MCP tools/call closes the thread-local SQLite conn.
+
+Still true by spec
+------------------
+- MCP cannot mint origin_kind=human. Tty: `py -3 -m soul_host seal review_packet.json` (type SEAL then COMMIT).
+- NLI is a token heuristic.
+- soul_remember stays quarantined until review commit.
+
+Run
+---
+  python -m unittest discover -s tests

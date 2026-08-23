@@ -56,6 +56,9 @@ coverage.xml
 _temp_*.db
 ~/.soul/
 
+# Local review packet (not committed)
+review_packet.json
+
 # IDE & OS files
 .vscode/
 .idea/
@@ -63,3 +66,15 @@ _temp_*.db
 *.swo
 .DS_Store
 Thumbs.db
+
+# Nested publish snapshot (optional local copy)
+github-ready/
+
+# Personal Cursor skills (not the Soul product)
+.cursor/skills/ponytail/
+.cursor/skills/ponytail-audit/
+.cursor/skills/ponytail-debt/
+.cursor/skills/ponytail-gain/
+.cursor/skills/ponytail-help/
+.cursor/skills/ponytail-review/
+.cursor/rules/ponytail.mdc

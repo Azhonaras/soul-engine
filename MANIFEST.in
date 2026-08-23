@@ -1,0 +1,5 @@
+include skills/soul-seal/SKILL.md
+include .claude/skills/soul-seal/SKILL.md
+include .cursor/skills/soul-seal/SKILL.md
+include .agents/skills/soul-seal/SKILL.md
+recursive-include schemas *.json

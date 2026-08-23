@@ -10,7 +10,8 @@ We provide active security updates, bug fixes, and vulnerability patches for the
 
 | Version | Supported | Status | Security Patch Window |
 | :--- | :---: | :--- | :--- |
-| **`v1.1.x`** | :white_check_mark: | **Active Stable** (Review Cycle + MCP-Evals) | Zero-day patches within 72h |
+| **`v1.1.1`** | :white_check_mark: | **Active bugfix** (MCP gates, review, neuromodulators) | Zero-day patches within 72h |
+| **`v1.1.x`** | :white_check_mark: | Active line | Zero-day patches within 72h |
 | `v1.0.x` | :white_check_mark: | Maintenance | Critical security fixes only |
 | `< v1.0.0` | :x: | End of Life (Deprecated) | Unsupported |
 
@@ -37,7 +38,7 @@ Soul Engine enforces mathematical and cryptographic security bounds defined in t
    - Forward-only version progression ($V \to V+1$) guarantees prior hashes cannot be decrypted or inverted.
 
 5. **Constitutional Behavioral Bounds (Constitution v0.2):**
-   - Trait bounds enforce `sycophancy: [0.0, 0.0]` (unconditional zero sycophancy) and prevent behavioral degradation under adversarial jailbreak prompts.
+   - Trait bounds clamp `sycophancy` to `[0.0, 10.0]` (constitution default `0.0`) and keep other traits inside `ALLOWED_TRAIT_BOUNDS` in `soul_kernel.py`.
 
 ---
 
@@ -72,7 +73,7 @@ Upon receiving a private disclosure:
 - **Acknowledgement & Initial Triage:** Within **24 hours**.
 - **Assessment & Invariant Audit:** Within **48 hours**.
 - **Fix & Patch Deployment:** Within **72 hours** for high/critical severity issues.
-- **Coordinated Disclosure:** A CVE and public security advisory will be published only *after* a verified patch is released on GitHub and PyPI.
+- **Coordinated Disclosure:** A public advisory is published only *after* a verified patch is on GitHub.
 
 ---
 

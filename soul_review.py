@@ -1,6 +1,6 @@
 """
-Soul Review Cycle Engine v0.1.0
-Normative Source: soul-review-cycle-technical-spec-v0.1.md & soul-constitution-v0.2.md
+Soul Review Cycle Engine v1.1.1
+Normative Source: docs/REVIEW_CYCLE_SPECIFICATION.md & docs/CONSTITUTION.md
 
 This module implements:
 1. Canonical JSON serialization and SHA-256 cryptographic hash binding.
@@ -9,7 +9,7 @@ This module implements:
 4. 17-point deterministic admissibility validation before preview and commit.
 5. Review Cycle state machine and atomic forward-only memory promotion.
 6. Host adapter protocol for trusted event provenance.
-7. Candidate extraction from quarantined episodes with NLI conflict linking.
+7. Candidate extraction from quarantined episodes with token-overlap NLI conflict linking.
 8. Salted cryptographic deletion cascade (GDPR compliant).
 """
 
@@ -24,7 +24,8 @@ import hashlib
 import sqlite3
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Literal, Set, Union, Protocol
+import threading
+from typing import Any, Dict, List, Optional, Tuple, Literal, Union
 from dataclasses import dataclass, field, asdict
 
 # ------------------------------------------------------------------------------
@@ -105,17 +106,6 @@ def canonical_json(payload: Any) -> bytes:
 def sha256_digest(payload: Any) -> str:
     """Compute sha256:<hex> digest of a canonical JSON payload."""
     return "sha256:" + hashlib.sha256(canonical_json(payload)).hexdigest()
-
-
-def compute_host_payload_hash(salt: str, payload_bytes_or_str: Union[str, bytes]) -> str:
-    if isinstance(payload_bytes_or_str, bytes):
-        payload_str = payload_bytes_or_str.decode("utf-8", errors="replace")
-    else:
-        payload_str = str(payload_bytes_or_str)
-    return sha256_digest({
-        "payload_hash_salt": salt,
-        "payload_bytes": payload_str
-    })
 
 
 def compute_host_event_hash(
@@ -612,11 +602,11 @@ class SoulReviewEngine:
         user_scope_key: str = "default_user",
         project_scope_key: Optional[str] = None,
         origin_kind: OriginKind = "human",
-        event_kind: EventKind = "user_input",
+        event_kind: EventKind = "conversation",
         payload: Any = None
     ) -> HostEvent:
         """Record an immutable host interaction event and update the hash chain."""
-        with self._get_conn() as conn:
+        with self._get_lock(), self._get_conn() as conn:
             cur = conn.cursor()
             cur.execute("""
             SELECT sequence, event_hash FROM host_events
@@ -683,7 +673,7 @@ class SoulReviewEngine:
         idempotency_key: Optional[str] = None
     ) -> ReviewCycle:
         """Open a review cycle anchored at the current host watermark."""
-        with self._get_conn() as conn:
+        with self._get_lock(), self._get_conn() as conn:
             cur = conn.cursor()
             if idempotency_key:
                 cur.execute("""
@@ -812,98 +802,122 @@ class SoulReviewEngine:
         if not cycle:
             raise ValueError(f"Review cycle {cycle_id} not found")
 
-        with self._get_conn() as conn:
-            cur = conn.cursor()
-            # Fetch unreviewed episodes
-            cur.execute("""
-            SELECT id, source_kind, provenance, content, entity_key, trust_state, created_at
-            FROM episodes
-            WHERE review_cycle_id IS NULL AND deleted_at IS NULL AND trust_state NOT IN ('superseded')
-            ORDER BY created_at ASC;
-            """)
-            ep_rows = cur.fetchall()
-
-            extracted: List[MemoryCandidate] = []
-            for ep in ep_rows:
-                ep_id, source_kind, prov, content, entity_key, trust_state, created_at = ep
-                if not content or contains_secret(content) or is_transient_progress(content):
-                    continue
-
-                cand_type: CandidateType = "project_fact"
-                if "prefer" in content.lower() or "like" in content.lower() or "always" in content.lower():
-                    cand_type = "preference"
-                elif "decid" in content.lower() or "architect" in content.lower() or "rule" in content.lower():
-                    cand_type = "project_decision"
-
-                cand_id = f"mcand_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
-                salt = generate_salt()
-                cand_hash = compute_candidate_hash(
-                    salt=salt,
-                    cycle_id=cycle_id,
-                    candidate_type=cand_type,
-                    canonical_text=content,
-                    original_provenance=prov,
-                    source_episode_refs=[ep_id],
-                    source_host_event_refs=[cycle.watermark_event_id],
-                    supporting_refs=[],
-                    contradicting_refs=[],
-                    scope="project" if cand_type in ("project_fact", "project_decision") else "user",
-                    sensitivity="internal",
-                    confidence=0.9 if trust_state == "verified" else 0.8,
-                    revises_candidate_id=None,
-                    created_from_human_event_ref=None
+        with self._get_lock():
+            existing = self.get_pending_candidates(cycle_id)
+            if existing:
+                logging.info(
+                    "soul_review extract: reusing %s pending candidates for cycle %s",
+                    len(existing),
+                    cycle_id,
                 )
+                return existing[:max_candidates]
 
-                candidate = MemoryCandidate(
-                    id=cand_id,
-                    user_scope_key=user_scope_key,
-                    cycle_id=cycle_id,
-                    candidate_type=cand_type,
-                    canonical_text=content,
-                    original_provenance=prov,
-                    source_episode_refs=[ep_id],
-                    source_host_event_refs=[cycle.watermark_event_id],
-                    supporting_refs=[],
-                    contradicting_refs=[],
-                    scope="project" if cand_type in ("project_fact", "project_decision") else "user",
-                    sensitivity="internal",
-                    confidence=0.9 if trust_state == "verified" else 0.8,
-                    status="pending",
-                    candidate_hash=cand_hash,
-                    created_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    candidate_hash_salt=salt
-                )
+            with self._get_conn() as conn:
+                cur = conn.cursor()
+                freeze_at = cycle.opened_at
 
-                valid, _ = validate_candidate_eligibility(candidate)
-                if valid:
-                    extracted.append(candidate)
-
-            # Store eligible candidates in database
-            for c in extracted:
                 cur.execute("""
-                INSERT INTO memory_candidates (
-                    id, user_scope_key, cycle_id, candidate_type, canonical_text,
-                    original_provenance, source_episode_refs_json, source_host_event_refs_json,
-                    supporting_refs_json, contradicting_refs_json, scope, sensitivity,
-                    confidence, status, candidate_hash, created_at, candidate_hash_salt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """, (
-                    c.id, c.user_scope_key, c.cycle_id, c.candidate_type, c.canonical_text,
-                    c.original_provenance, json.dumps(c.source_episode_refs), json.dumps(c.source_host_event_refs),
-                    json.dumps(c.supporting_refs), json.dumps(c.contradicting_refs), c.scope, c.sensitivity,
-                    c.confidence, c.status, c.candidate_hash, c.created_at, c.candidate_hash_salt
-                ))
+                SELECT id, source_kind, provenance, content, entity_key, trust_state, created_at
+                FROM episodes
+                WHERE review_cycle_id IS NULL
+                  AND deleted_at IS NULL
+                  AND trust_state NOT IN ('superseded')
+                  AND (? IS NULL OR created_at <= ?)
+                  AND id NOT IN (
+                    SELECT value FROM memory_candidates, json_each(memory_candidates.source_episode_refs_json)
+                    WHERE memory_candidates.cycle_id = ?
+                  )
+                ORDER BY created_at ASC;
+                """, (freeze_at, freeze_at, cycle_id))
+                ep_rows = cur.fetchall()
 
-            # Update cycle status to review_ready or sealed_no_changes
-            new_status = "review_ready" if extracted else "sealed_no_changes"
-            cur.execute("""
-            UPDATE review_cycles
-            SET status = ?, prepared_at = ?
-            WHERE id = ?;
-            """, (new_status, datetime.datetime.now(datetime.timezone.utc).isoformat(), cycle_id))
-            conn.commit()
+                extracted: List[MemoryCandidate] = []
+                for ep in ep_rows:
+                    ep_id, source_kind, prov, content, entity_key, trust_state, created_at = ep
+                    if not content or contains_secret(content) or is_transient_progress(content):
+                        continue
 
-        return extracted[:max_candidates]
+                    cand_type: CandidateType = "project_fact"
+                    if "prefer" in content.lower() or "like" in content.lower() or "always" in content.lower():
+                        cand_type = "preference"
+                    elif "decid" in content.lower() or "architect" in content.lower() or "rule" in content.lower():
+                        cand_type = "project_decision"
+
+                    cand_id = f"mcand_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
+                    salt = generate_salt()
+                    cand_hash = compute_candidate_hash(
+                        salt=salt,
+                        cycle_id=cycle_id,
+                        candidate_type=cand_type,
+                        canonical_text=content,
+                        original_provenance=prov,
+                        source_episode_refs=[ep_id],
+                        source_host_event_refs=[cycle.watermark_event_id],
+                        supporting_refs=[],
+                        contradicting_refs=[],
+                        scope="project" if cand_type in ("project_fact", "project_decision") else "user",
+                        sensitivity="internal",
+                        confidence=0.9 if trust_state == "verified" else 0.8,
+                        revises_candidate_id=None,
+                        created_from_human_event_ref=None
+                    )
+
+                    candidate = MemoryCandidate(
+                        id=cand_id,
+                        user_scope_key=user_scope_key,
+                        cycle_id=cycle_id,
+                        candidate_type=cand_type,
+                        canonical_text=content,
+                        original_provenance=prov,
+                        source_episode_refs=[ep_id],
+                        source_host_event_refs=[cycle.watermark_event_id],
+                        supporting_refs=[],
+                        contradicting_refs=[],
+                        scope="project" if cand_type in ("project_fact", "project_decision") else "user",
+                        sensitivity="internal",
+                        confidence=0.9 if trust_state == "verified" else 0.8,
+                        status="pending",
+                        candidate_hash=cand_hash,
+                        created_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        candidate_hash_salt=salt
+                    )
+
+                    valid, _ = validate_candidate_eligibility(candidate)
+                    if valid:
+                        extracted.append(candidate)
+
+                extracted = rank_candidates(extracted)[:max_candidates]
+                logging.info(
+                    "soul_review extract: inserting %s candidates for cycle %s (watermark=%s)",
+                    len(extracted),
+                    cycle_id,
+                    cycle.watermark_event_id,
+                )
+
+                for c in extracted:
+                    cur.execute("""
+                    INSERT INTO memory_candidates (
+                        id, user_scope_key, cycle_id, candidate_type, canonical_text,
+                        original_provenance, source_episode_refs_json, source_host_event_refs_json,
+                        supporting_refs_json, contradicting_refs_json, scope, sensitivity,
+                        confidence, status, candidate_hash, created_at, candidate_hash_salt
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """, (
+                        c.id, c.user_scope_key, c.cycle_id, c.candidate_type, c.canonical_text,
+                        c.original_provenance, json.dumps(c.source_episode_refs), json.dumps(c.source_host_event_refs),
+                        json.dumps(c.supporting_refs), json.dumps(c.contradicting_refs), c.scope, c.sensitivity,
+                        c.confidence, c.status, c.candidate_hash, c.created_at, c.candidate_hash_salt
+                    ))
+
+                new_status = "review_ready" if extracted else "sealed_no_changes"
+                cur.execute("""
+                UPDATE review_cycles
+                SET status = ?, prepared_at = ?
+                WHERE id = ?;
+                """, (new_status, datetime.datetime.now(datetime.timezone.utc).isoformat(), cycle_id))
+                conn.commit()
+
+            return extracted
 
     def get_pending_candidates(self, cycle_id: str) -> List[MemoryCandidate]:
         with self._get_conn() as conn:
@@ -1012,7 +1026,7 @@ class SoulReviewEngine:
                     cycle_id=cycle_id,
                     candidate_type="correction",
                     canonical_text=corrected_text,
-                    original_provenance="verified",
+                    original_provenance=c_row[4],
                     source_episode_refs=json.loads(c_row[5]),
                     source_host_event_refs=[human_event_ref],
                     supporting_refs=[],
@@ -1034,7 +1048,7 @@ class SoulReviewEngine:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """, (
                     result_cand_id, user_scope_key, cycle_id, "correction", corrected_text,
-                    "verified", c_row[5], json.dumps([human_event_ref]),
+                    c_row[4], c_row[5], json.dumps([human_event_ref]),
                     json.dumps([]), json.dumps([]), c_row[9], c_row[10],
                     1.0, "confirmed", result_cand_hash, decided_at, candidate_id,
                     human_event_ref, res_salt
@@ -1147,6 +1161,12 @@ class SoulReviewEngine:
                         session_only.append(item)
                     else:
                         additions.append(item)
+                elif dec == "session_only":
+                    session_only.append(item)
+                elif dec == "keep_both_with_context":
+                    additions.append(item)
+                elif dec == "keep_old":
+                    rejected.append(item)
                 elif dec == "correct":
                     corrections.append({
                         "id": cand_id,
@@ -1273,7 +1293,7 @@ class SoulReviewEngine:
 
             for r in dec_rows:
                 dec_id, dec, cand_id, res_cand_id, ctype, text, prov, scope, eps_json, conf, rtext, rtype, contra_json = r
-                if dec in ("remember", "replace_old") and scope != "session_only":
+                if dec in ("remember", "replace_old", "keep_both_with_context") and scope != "session_only":
                     superseded_id = None
                     if dec == "replace_old" and contra_json:
                         contra_refs = json.loads(contra_json)
@@ -1311,6 +1331,13 @@ class SoulReviewEngine:
                         cycle.user_scope_key, cycle.project_scope_key or cycle.user_scope_key,
                         eps_json, dec_id, superseded_id, conf, content_hash, now_iso, m_salt
                     ))
+                    try:
+                        cur.execute(
+                            "INSERT INTO reviewed_memories_fts (canonical_text, memory_id) VALUES (?, ?);",
+                            (text, mem_id),
+                        )
+                    except Exception:
+                        pass
 
                     new_mem_set[mem_id] = content_hash
                     affected_memory_ids.append(mem_id)
@@ -1323,7 +1350,7 @@ class SoulReviewEngine:
                         salt=m_salt,
                         canonical_text=rtext,
                         memory_type=rtype or "correction",
-                        provenance="verified",
+                        provenance=prov,
                         scope=scope,
                         owner_user_scope_key=cycle.user_scope_key,
                         scope_key=cycle.project_scope_key or cycle.user_scope_key,
@@ -1340,10 +1367,17 @@ class SoulReviewEngine:
                         review_decision_ref, supersedes_memory_id, confidence, content_hash, created_at, content_hash_salt
                     ) VALUES (?, ?, ?, ?, 'accessible', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?);
                     """, (
-                        mem_id, rtext, rtype or "correction", "verified", scope,
+                        mem_id, rtext, rtype or "correction", prov, scope,
                         cycle.user_scope_key, cycle.project_scope_key or cycle.user_scope_key,
                         eps_json, dec_id, 1.0, content_hash, now_iso, m_salt
                     ))
+                    try:
+                        cur.execute(
+                            "INSERT INTO reviewed_memories_fts (canonical_text, memory_id) VALUES (?, ?);",
+                            (rtext, mem_id),
+                        )
+                    except Exception:
+                        pass
 
                     new_mem_set[mem_id] = content_hash
                     affected_memory_ids.append(mem_id)
@@ -1431,15 +1465,20 @@ class SoulReviewEngine:
                 VALUES (?, ?, ?, ?);
                 """, (cycle.user_scope_key, new_version, mid, mhash))
 
-            # Mark episodes reviewed
+            # Mark only decided (not pending/deferred) episodes as belonging to this cycle
             cur.execute("""
             UPDATE episodes
             SET review_cycle_id = ?
             WHERE review_cycle_id IS NULL AND id IN (
                 SELECT value FROM memory_candidates, json_each(memory_candidates.source_episode_refs_json)
                 WHERE memory_candidates.cycle_id = ?
+                  AND memory_candidates.status IN ('confirmed', 'corrected', 'rejected')
             );
             """, (cycle_id, cycle_id))
+            logging.info(
+                "soul_review commit: stamped decided episodes for cycle %s; pending/deferred left extractable",
+                cycle_id,
+            )
 
             # Update cycle status to committed
             cur.execute("""

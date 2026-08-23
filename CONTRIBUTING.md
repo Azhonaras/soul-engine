@@ -28,20 +28,10 @@ Thank you for your interest in contributing to Soul Engine. We welcome contribut
 
 ## Running tests and verification
 
-Before submitting a pull request, ensure all test suites pass:
+Before submitting a pull request, ensure the suite passes (same command as CI):
 
 ```bash
-# 1. Run core unit tests
-python tests/test_unit.py
-
-# 2. Run industrial concurrency & Byzantine defense test suite
-python tests/test_industry_grade.py
-
-# 3. Run bio-homeostatic neuromodulation simulation
-python tests/test_bio_reward.py
-
-# 4. Run latency & benchmark suite
-python tests/test_benchmark.py
+python -m unittest discover -s tests
 ```
 
 ---
@@ -57,8 +47,7 @@ When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you must pre
    All database writes must execute under `BEGIN IMMEDIATE;` to guarantee zero version race condition collisions.
 3. **Neuromodulatory clamping**:
    All traits must strictly adhere to their constitutional bounds $[min, max]$ defined in the Genesis Constitution.
-4. **Secret scrubbing**:
-   Never persist high-entropy API keys (AWS, Stripe, JWT, DB passwords) to disk without masking.
+4. Preserve human origin: MCP cannot mint `origin_kind=human`. Humans type `SEAL` in any MCP chat to review memory, then use `soul_host` on a tty (`SEAL` then `COMMIT`).
 
 ---
 

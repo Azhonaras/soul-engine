@@ -1,12 +1,12 @@
-# Soul Engine (v1.1.0)
+# Soul Engine (v1.1.1)
 ### *A Cognitive Identity and Epistemic Memory Kernel for Autonomous AI Agents*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](SECURITY.md)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Protocol: Model Context Protocol](https://img.shields.io/badge/Protocol-MCP%20Standard-green.svg)](https://modelcontextprotocol.io/)
-[![MCP-Evals: 100% Passed](https://img.shields.io/badge/MCP--Evals-100%25%20Verified-brightgreen.svg)](EVAL_REPORT.md)
-[![Tests: ISO/IEC 29119](https://img.shields.io/badge/Tests-100%25%20Verified-success.svg)](tests/)
+[![MCP-Evals](https://img.shields.io/badge/MCP--Evals-harness%20in%20CI-blue.svg)](EVAL_REPORT.md)
+[![Tests](https://img.shields.io/badge/Tests-unittest%20discover-success.svg)](tests/)
 
 Soul Engine is a local cognitive kernel for AI agents. It addresses three common limitations in agent systems: session amnesia, vulnerability to adversarial memory poisoning (gaslighting), and behavioral drift.
 
@@ -29,13 +29,13 @@ Soul Engine structures agent memory and behavior around three principles:
    Instead of relying on static instructions, the agent maintains an internal neuromodulatory state. Task successes release Dopamine (increasing audacity and curiosity), while errors trigger Cortisol (increasing humility and error anxiety). During resting periods, Serotonergic decay gradually returns traits toward constitutional baselines, preventing extreme overconfidence or chronic hesitation.
 
 3. **Cryptographic state ledger and rollback**  
-   Every state change and memory record is stored in an append-only SHA-256 ledger. If state corruption or drift occurs, the system can restore any previous checkpoint in under $2\text{ ms}$.
+   Every state change and memory record is stored in an append-only SHA-256 ledger. If state corruption or drift occurs, the system can restore a previous checkpoint (v1.0 measure: under $2\text{ ms}$; not re-timed on 1.1.1).
 
 ---
 
 ## Quickstart: installation
 
-You can install Soul Engine and register its MCP server with a single command:
+Install Soul Engine (database + optional JSON MCP configs):
 
 ```bash
 # Clone the repository
@@ -46,26 +46,99 @@ cd soul-engine
 python install.py
 ```
 
-The installer initializes your local database (`~/.soul/soul.db`) and registers the MCP configuration with:
-* Claude Desktop (`claude_desktop_config.json`)
-* Google Antigravity (`mcp_config.json`)
-* Cursor (`~/.cursor/mcp.json`)
-* Goose CLI (`config.yaml`)
-* Windsurf (`mcp_config.json`)
+`install.py` creates `~/.soul/soul.db` and copies the **same** `soul-seal` skill into the standard skill dirs on the machine that runs it:
+
+* Claude Code — `~/.claude/skills/soul-seal/SKILL.md`
+* Hermes Agent — `~/.hermes/skills/soul-seal/SKILL.md`
+* Antigravity — `~/.gemini/config/skills/soul-seal/SKILL.md` (CLI also `~/.gemini/antigravity-cli/skills/soul-seal/`)
+* Cursor — `~/.cursor/skills/soul-seal/SKILL.md`
+* Pi — `~/.pi/agent/skills/soul-seal/SKILL.md`
+* Shared Agent Skills — `~/.agents/skills/soul-seal/SKILL.md` (Pi, Antigravity, and others that scan this dir)
+
+Any other host: same file if it loads Agent Skills; otherwise the MCP server `instructions` field. Type **`SEAL`**. No Cursor-only path.
+
+Soul is **one** stdio MCP server. Same command, same 20 tools, same review. If a step cannot be done in Claude, Hermes, Antigravity, Cursor, and Pi, it is not part of the product.
+
+### MCP (same server, every harness)
+
+```
+command: python
+args: ["-m", "soul_mcp_server"]
+env: SOUL_DB_PATH=<path to soul.db>
+```
+
+Windows: `py -3 -m soul_mcp_server`. After `pip install -e .`, `soul-mcp` is on PATH.
+
+**Claude Desktop** (`mcpServers` in `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "soul": {
+      "command": "python",
+      "args": ["-m", "soul_mcp_server"],
+      "env": { "SOUL_DB_PATH": "/home/you/.soul/soul.db" }
+    }
+  }
+}
+```
+
+**Hermes Agent** (`mcp_servers` in `~/.hermes/config.yaml`; see [Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)):
+
+```yaml
+mcp_servers:
+  soul:
+    command: "python"
+    args: ["-m", "soul_mcp_server"]
+    env:
+      SOUL_DB_PATH: "/home/you/.soul/soul.db"
+```
+
+**Antigravity** (`mcpServers` in `~/.gemini/config/mcp_config.json` — same JSON as Claude):
+
+```json
+{
+  "mcpServers": {
+    "soul": {
+      "command": "python",
+      "args": ["-m", "soul_mcp_server"],
+      "env": { "SOUL_DB_PATH": "/home/you/.soul/soul.db" }
+    }
+  }
+}
+```
+
+Cursor, Pi, Goose, and every other MCP client: paste that same `command` / `args` / `env` into that client’s config (JSON or YAML) and reload. `install.py` writes JSON configs when those files already exist (Claude Desktop, Antigravity, Cursor). It does not write YAML (add the Hermes block by hand).
+
+### Human review (same for every harness)
+
+Type **`SEAL`** in the agent chat. That is the only product trigger. Some IDEs also expose this skill as `/soul-seal`; that is the same interview, not a second command. There is no `/Soul_Seal`.
+
+The agent shows one quarantined fact and five choices you can pick or edit (remember / correct / session_only / reject / defer). Idle / bye / wrap-up do not commit.
+
+MCP cannot set `origin_kind=human`. After the interview the agent writes `review_packet.json`. Then **you** in a terminal:
+
+```bash
+py -3 -m soul_host seal review_packet.json
+```
+
+Type `SEAL` (one human event per decision), then `COMMIT` on the exact preview. The agent must not run `soul_host`. `soul_review_commit` is the same MCP tool everywhere; it only succeeds after that human row exists.
+
+`install.py` copies `skills/soul-seal/SKILL.md` into Claude Code, Hermes, Antigravity, Cursor, Pi, and `~/.agents/skills`. The MCP server `instructions` field is the fallback so a host with no skills still runs the same SEAL interview.
 
 ---
 
 ## Architecture
 
 ```
-                         THE SOUL COGNITIVE LOOP (v1.1.0)
+                         THE SOUL COGNITIVE LOOP (v1.1.1)
  ┌─────────────────────────────────────────────────────────────────────────┐
  │ 1. INGESTION & DEFENSE                                                  │
  │    New Observation ──► Secret Scrubber ──► Epistemic Provenance Check  │
  │    (verified > observed > inferred > reported > imagined)              │
  ├─────────────────────────────────────────────────────────────────────────┤
  │ 2. CONTRADICTION RESOLUTION & QUARANTINE                                │
- │    Candidate Top-5 Search ──► NLI Analysis ──► Unresolved Tensions DB   │
+ │    Candidate Top-5 Search ──► Token NLI heuristic ──► Tensions ledger  │
  ├─────────────────────────────────────────────────────────────────────────┤
  │ 3. BIO-HOMEOSTATIC NEUROMODULATION                                      │
  │    Task Success (+Valence) ──► Dopamine Surge (Audacity ↑, Anxiety ↓)   │
@@ -73,9 +146,9 @@ The installer initializes your local database (`~/.soul/soul.db`) and registers 
  │    Idle Rest Cycles        ──► Serotonergic Decay (λ = 0.15)            │
  ├─────────────────────────────────────────────────────────────────────────┤
  │ 4. CRYPTOGRAPHIC STATE LEDGER                                           │
- │    SHA-256 Merkle Chain ──► Point-in-Time State Rollback (< 2 ms)       │
+ │    SHA-256 Merkle Chain ──► Point-in-Time State Rollback (v1.0: < 2 ms) │
  ├─────────────────────────────────────────────────────────────────────────┤
- │ 5. HUMAN REVIEW CYCLE GOVERNANCE (v1.1.0)                               │
+ │ 5. HUMAN REVIEW CYCLE GOVERNANCE (v1.1.1)                               │
  │    Watermark Freezes ──► Pre-Commit Diffs ──► SHA-256 Commit Receipts   │
  │    Forward-Only Rollback (V → V+1) ──► Salt-Nullified Privacy Erasure   │
  └─────────────────────────────────────────────────────────────────────────┘
@@ -83,65 +156,67 @@ The installer initializes your local database (`~/.soul/soul.db`) and registers 
 
 ```mermaid
 flowchart TD
-    E["Host Interaction Event"] --> S["Secret Scrubber & Credential Filter"]
-    S --> P{"Epistemic Rank Authority Check"}
-    P -->|verified / observed| Q["Quarantine Memory Candidate"]
-
-    Q --> NLI["Contradiction & NLI Engine"]
-    NLI --> BIO["Neuromodulation Loop: Dopamine / Cortisol / Serotonin"]
-    BIO --> TRAIT["Bounded Trait Clamping: Constitutional Limits"]
-
-    TRAIT --> START["soul_review_start: Freeze Watermark"]
-    START --> STAGE["soul_review_stage_decision: 5 Deterministic Actions"]
-    STAGE --> PREV["soul_review_preview: Pre-Commit Unified Diff"]
-    PREV --> COMMIT["soul_review_commit: Human Origin Verified"]
-
-    COMMIT --> DB[("SQLite WAL Storage: reviewed_memories")]
-    COMMIT --> HASH["SHA-256 Merkle Commit Receipt"]
-    HASH --> RB["Forward-Only Rollback (V &rarr; V+1)"]
-    HASH --> GDPR["GDPR Salt-Nullified Memory Erasure"]
+    E["Any ingest / soul_remember"] --> S["Secret scrubber"]
+    S --> Q["Quarantine: episodes table"]
+    Q --> NLI["Token NLI heuristic vs existing claims"]
+    NLI --> BIO["neuromodulators: DA / cortisol; serotonin derived"]
+    BIO --> START["soul_review_start"]
+    START --> IV["Human types SEAL in any MCP chat"]
+    IV --> ASK["Interview writes review_packet.json"]
+    ASK --> SEAL["soul_host tty: type SEAL then COMMIT"]
+    SEAL --> DB[("reviewed_memories = long-term")]
+    DB --> RECALL["Default soul_recall / soul_digest"]
+    DB --> HASH["SHA-256 commit receipt"]
+    HASH --> RB["Forward-only memory-set rollback"]
 ```
+
+Default **`soul_recall` / `soul_digest` read `reviewed_memories` only**. Quarantined episodes stay on disk until review commit. That is long-term memory, not “ingest = recall.”
 
 ---
 
 ## Industry benchmark comparison
 
-| Dimension | **Soul Engine (v1.1.0)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Reflexion** |
+| Dimension | **Soul Engine (v1.1.1)** | **Mem0** | **Letta (MemGPT)** | **Zep (Graphiti)** | **Reflexion** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Primary Approach** | **Epistemic Bio-Homeostasis** | Semantic Fact Store | OS Context Paging | Temporal Graph | Verbal RL Buffer |
 | **Epistemic Authority Ranking** | **Yes ($\text{verified} > \dots > \text{imagined}$)** | No | No | No | No |
-| **Byzantine Gaslighting Defense** | **100% (Quarantine via NLI)** | 0% (Blind overwrite) | 0% (Blind write) | Partial (Appends) | 0% |
+| **Byzantine Gaslighting Defense** | **Quarantine + token NLI heuristic** | 0% (Blind overwrite) | 0% (Blind write) | Partial (Appends) | 0% |
 | **Bio-Neuromodulation Loop** | **Yes (Dopamine, Cortisol, Serotonin)** | No | No | No | No |
 | **Constitutional Trait Bounds** | **Yes (Mathematical Clamping)** | No | No | No | No |
 | **Cryptographic Hash Ledger** | **Yes (SHA-256 State Auditing)** | No | No | No | No |
-| **Ingestion Latency (p50 / p95)** | **3.38 ms / 3.85 ms** | ~50-150 ms (Cloud) | ~80-200 ms | ~40-120 ms | N/A |
-| **Concurrent ACID Reliability** | **113.6 ops/s (0% Collisions)** | Backend-dependent | Server-bound | Cloud-bound | Local single-thread |
-| **Credential & Secret Scrubbing** | **100% (High-Entropy Regex)** | No | No | No | No |
-| **Interface Standard** | **Native 12-Tool JSON-RPC MCP** | Custom SDK / REST | REST / CLI | REST / Cloud API | Python Script |
+| **Ingestion Latency (p50 / p95)** | **3.38 ms / 3.85 ms (v1.0 measure)** | ~50-150 ms (Cloud) | ~80-200 ms | ~40-120 ms | N/A |
+| **Concurrent ACID Reliability** | **113.6 ops/s (v1.0 measure)** | Backend-dependent | Server-bound | Cloud-bound | Local single-thread |
+| **Credential & Secret Scrubbing** | **Regex intercept (not a perfect DLP)** | No | No | No | No |
+| **Interface Standard** | **Native 20-tool JSON-RPC MCP** | Custom SDK / REST | REST / CLI | REST / Cloud API | Python Script |
 
 ---
 
-## The 12 Model Context Protocol (MCP) tools
+## The 20 Model Context Protocol (MCP) tools
 
-Soul Engine provides 12 MCP tools for agent workflows:
+Soul Engine exposes 12 core tools plus 8 review-cycle tools.
 
 ### Ingestion and memory management
 * **`soul_remember`**: Writes interaction episodes into quarantined memory with automated secret filtering and entity key supersession.
-* **`soul_verify`**: Evaluates new claims against established ground truth using the epistemic hierarchy.
-* **`soul_recall`**: Hybrid multi-stage retrieval combining dense vector embeddings with SQLite FTS5 BM25 search.
-* **`soul_digest`**: Generates a concise context primer containing active traits and verified facts for system prompts.
+* **`soul_verify`**: Evaluates new claims against established ground truth using the epistemic hierarchy (local token-overlap NLI heuristic, not a transformer).
+* **`soul_recall`**: Default search of **reviewed (long-term) memory** via FTS5 BM25 plus a hashing/dense vector fallback (`sentence-transformers` optional). Pass `include_quarantined=True` only on the kernel for review/debug — MCP default is reviewed-only.
+* **`soul_digest`**: Compact traits + neuromodulators + **reviewed** facts for a system prompt. Unreviewed episodes are omitted.
 
 ### Identity governance and homeostasis
 * **`soul_get_identity`**: Inspects current trait levels, neuromodulators, and unresolved tensions.
-* **`soul_reward`**: Adjusts Dopamine and Cortisol levels based on task outcome valence ($\text{valence} \in [-1.0, 1.0]$).
-* **`soul_update_trait`**: Updates constitutional behavioral traits within bounded step limits ($\Delta \le 5.0$).
-* **`soul_heal`**: Relaxes behavioral traits back to constitutional baselines when drift occurs.
+* **`soul_reward`**: Adjusts Dopamine and Cortisol from `valence` ∈ [-1.0, 1.0]; values persist in the `neuromodulators` table. Serotonin is `1 - max(DA, cortisol)`.
+* **`soul_update_trait`**: Updates constitutional behavioral traits within bounded limits. MCP cannot set `is_human_approved`.
+* **`soul_heal`**: Recalibrates traits. MCP requires `human_event_ref`.
 
 ### Reflection, simulation, and recovery
 * **`soul_reflect`**: Synthesizes unresolved tensions into higher-order generalized beliefs.
 * **`soul_dream`**: Runs counterfactual simulations tagged with the provenance level `imagined`.
-* **`soul_rollback`**: Restores the entire identity and memory state to a previous version in under $2\text{ ms}$.
-* **`soul_daemon_status`**: Reports health metrics and consolidation history from background worker cycles.
+* **`soul_rollback`**: Restores identity to a previous version (forward-only). MCP requires `human_event_ref`.
+* **`soul_daemon_status`**: Reports health metrics from the background worker.
+
+### Review cycle (human host event required to commit)
+* **`soul_host_event`**: Appends a tamper-evident host event. MCP origin is never `human`.
+* **`soul_review_start`** / **`soul_review_status`** / **`soul_review_stage_decision`** / **`soul_review_preview`** / **`soul_review_commit`**
+* **`soul_memory_rollback`** / **`soul_memory_delete`**: Require `human_event_ref`.
 
 ---
 
@@ -169,8 +244,8 @@ $$\text{RRF Score}(d) = \frac{0.6}{60 + \text{rank}_{\text{dense}}(d)} + \frac{0
 Soul Engine is tested against ISO/IEC/IEEE 29119 software standards:
 
 ```bash
-# 1. Run core invariant and unit tests
-python tests/test_unit.py
+# 1. Run the full automated suite (from repo root)
+python -m unittest discover -s tests
 
 # 2. Run high-concurrency stress (20 threads / 500 ops) and Byzantine defense tests
 python tests/test_industry_grade.py
@@ -181,7 +256,7 @@ python tests/test_bio_reward.py
 # 4. Run latency benchmarks (p50 / p95)
 python tests/test_benchmark.py
 
-# 5. Run the interactive live agent demonstration
+# 5. Demo: quarantine vs long-term reviewed memory (plus reward/homeostasis)
 python examples/demo_live_agent.py
 ```
 
