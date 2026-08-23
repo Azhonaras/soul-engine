@@ -131,7 +131,7 @@ def generate_markdown_report(summary: dict) -> str:
 | `review_lifecycle` | 2 | `soul_review_start`, `soul_review_status` |
 | `review_interview` | 5 | `soul_review_stage_decision` (remember/correct/reject/replace_old/session_only) |
 | `review_promotion` | 2 | `soul_review_preview`, `soul_review_commit` |
-| `governance` | 1 | `soul_memory_rollback` ($V \to V+1$) |
+| `governance` | 1 | `soul_memory_rollback` (V -> V+1) |
 | `privacy_governance` | 1 | `soul_memory_delete` (GDPR salted cascade) |
 | `negative_control` | 3 | Coding / math questions correctly skipping memory tool calls |
 

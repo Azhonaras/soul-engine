@@ -67,7 +67,7 @@ args: ["-m", "soul_mcp_server"]
 env: SOUL_DB_PATH=<path to soul.db>
 ```
 
-Windows: `py -3 -m soul_mcp_server`. After `pip install -e .`, `soul-mcp` is on PATH.
+`python -m soul_mcp_server` works after `python install.py` or `pip install -e .`. Without that, set `args` to the full path of `soul_mcp_server.py` in the clone — that is what `install.py` writes into JSON MCP configs. Windows: `py -3 -m soul_mcp_server`. After install, `soul-mcp` is on PATH.
 
 **Claude Desktop** (`mcpServers` in `claude_desktop_config.json`):
 

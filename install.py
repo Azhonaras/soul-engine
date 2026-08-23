@@ -69,18 +69,18 @@ def get_default_mcp_config_paths() -> list[Path]:
 
 
 def install_dependencies(editable: bool = True):
-    log("Installing Python package dependencies...")
-    cmd = [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]
+    """Install this clone so `python -m soul_mcp_server` works from any cwd."""
+    log("Installing Soul Engine (editable)...")
+    root = str(Path(__file__).resolve().parent)
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if editable:
+        cmd.append("-e")
+    cmd.append(root)
     try:
         subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
-        log_ok("Dependencies installed successfully.")
+        log_ok("Package installed; python -m soul_mcp_server is available.")
     except Exception as exc:
-        log_warn(f"Failed to run pip install requirements.txt: {exc}. Attempting setup.py develop...")
-        try:
-            subprocess.check_call([sys.executable, "setup.py", "develop"], stdout=subprocess.DEVNULL)
-            log_ok("Package installed via setup.py.")
-        except Exception as e2:
-            log_warn(f"Pip setup warning: {e2}. Continuing with local module execution.")
+        log_warn(f"pip install -e failed: {exc}. MCP configs still use soul_mcp_server.py path.")
 
 
 def init_database(db_path: Path):

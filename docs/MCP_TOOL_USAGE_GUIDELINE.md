@@ -9,7 +9,7 @@ Long-term memory = **`reviewed_memories` after a human-origin commit**. `soul_re
 ## 1. Setup
 
 * Python 3.9+ (no Node required)
-* Same stdio server for every harness: `python -m soul_mcp_server`. Claude Desktop JSON first; Hermes YAML; Antigravity `~/.gemini/config/mcp_config.json`; Cursor, Pi, and any other client get the same `command` / `args` / `env`. `install.py` writes JSON MCP configs and copies `skills/soul-seal/SKILL.md` into Claude Code, Hermes, Antigravity, Cursor, Pi, and `~/.agents/skills` on the machine that runs the installer. MCP `instructions` cover hosts with no skill dirs.
+* Same stdio server for every harness: `python -m soul_mcp_server` after `python install.py` or `pip install -e .`. Without that, point `args` at `soul_mcp_server.py` in the clone. Claude Desktop JSON first; Hermes YAML; Antigravity `~/.gemini/config/mcp_config.json`; Cursor, Pi, and any other client get the same `command` / `args` / `env`. `install.py` writes JSON MCP configs and copies `skills/soul-seal/SKILL.md` into Claude Code, Hermes, Antigravity, Cursor, Pi, and `~/.agents/skills` on the machine that runs the installer. MCP `instructions` cover hosts with no skill dirs.
 
 ```json
 {

@@ -408,7 +408,7 @@ sequenceDiagram
     participant Ledger as Audit & State Ledger
 
     Host->>Cycle: soul_host_event(session_id, event_kind, payload)
-    Note over Cycle: MCP origin is never human; episode quarantined
+    Note over Cycle: MCP origin is never human, episode quarantined
     Human->>Cycle: soul_review_start(session_id, trigger_kind)
     Cycle->>Cycle: Watermark and extract memory_candidates
     Cycle-->>Human: Candidates (interview one at a time)
