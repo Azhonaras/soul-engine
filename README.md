@@ -273,4 +273,4 @@ python examples/demo_live_agent.py
 ## License
 
 Soul Engine is released under the open-source [MIT License](LICENSE).  
-Copyright (c) 2026 Azhonaras (Navid Badami), Antigravity (UPI), and Soul Contributors.
+Copyright (c) 2026 Azhonaras (Navid Badami), and Soul Contributors.
