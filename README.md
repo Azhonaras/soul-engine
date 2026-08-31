@@ -37,7 +37,7 @@ Soul Engine structures agent memory and behavior around three principles:
 
 ## Quickstart: installation
 
-Install Soul Engine (database + optional JSON MCP configs):
+PyPI name `soul-engine` is a **different** project (OpenMind 0.1.0). Do not `pip install soul-engine`. This kernel’s distribution name is `soul-engine-mcp`. Until that is uploaded, install from the clone:
 
 ```bash
 # Clone the repository
