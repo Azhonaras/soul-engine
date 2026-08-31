@@ -3,7 +3,7 @@ requires = ["setuptools>=77.0,<84", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "soul-engine"
+name = "soul-engine-mcp"
 version = "1.2.0"
 authors = [
   { name="Azhonaras (Navid Badami)", email="nbada@users.noreply.github.com" },
