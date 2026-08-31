@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Soul MCP Universal Auto-Installer & Self-Registration Script v1.1.1
+Soul MCP Universal Auto-Installer & Self-Registration Script v1.2.0
 Allows any AI agent or operator to automatically install and register Soul in their runtime environment.
 """
 
@@ -23,7 +23,7 @@ BANNER = r"""
    _\ \/ _ \/ // /  / /__ / /|_/ / /__/ ___/\ \/ -_) __/ |/ / -_) __/ 
   /___/\___/\_,_/  /____//_/  /_/\___/_/  /___/\__/_/  |___/\__/_/   
                                                                       
-    Bio-Homeostatic Epistemic Identity Engine & MCP Server (v1.1.1)    
+    Bio-Homeostatic Epistemic Identity Engine & MCP Server (v1.2.0)    
 ======================================================================
 """
 
@@ -63,12 +63,13 @@ def get_default_mcp_config_paths() -> list[Path]:
 
     paths.append(home / ".gemini" / "config" / "mcp_config.json")  # Antigravity
     paths.append(home / ".cursor" / "mcp.json")
-    paths.append(home / ".config" / "goose" / "config.yaml")
+    # ponytail: goose uses YAML which the installer can't write; dropped until
+    # a YAML writer exists (see register_mcp_config skip path).
 
     return paths
 
 
-def install_dependencies(editable: bool = True):
+def install_dependencies(editable: bool = True) -> bool:
     """Install this clone so `python -m soul_mcp_server` works from any cwd."""
     log("Installing Soul Engine (editable)...")
     root = str(Path(__file__).resolve().parent)
@@ -77,10 +78,12 @@ def install_dependencies(editable: bool = True):
         cmd.append("-e")
     cmd.append(root)
     try:
-        subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
+        subprocess.check_call(cmd)
         log_ok("Package installed; python -m soul_mcp_server is available.")
+        return True
     except Exception as exc:
-        log_warn(f"pip install -e failed: {exc}. MCP configs still use soul_mcp_server.py path.")
+        log_warn(f"pip install -e failed: {exc}. MCP configs will use soul_mcp_server.py path.")
+        return False
 
 
 def init_database(db_path: Path):
@@ -96,7 +99,30 @@ def init_database(db_path: Path):
     return kernel
 
 
-def register_mcp_config(target_config: Path, server_script_path: Path, db_path: Path, python_exe: str):
+def init_admin_key(soul_dir: Path) -> Path:
+    """Generate or verify cryptographically random admin secret for Tier-2 signing."""
+    key_path = soul_dir / "admin.key"
+    if not key_path.exists():
+        import secrets
+        key_hex = secrets.token_hex(32)
+        key_path.write_text(key_hex + "\n", encoding="utf-8")
+        try:
+            os.chmod(key_path, 0o600)
+        except Exception:
+            pass
+        log_ok(f"Generated secure admin signing key at: {key_path}")
+    else:
+        log(f"Existing admin signing key verified at: {key_path}")
+    return key_path
+
+
+def register_mcp_config(
+    target_config: Path,
+    server_script_path: Path,
+    db_path: Path,
+    python_exe: str,
+    use_module: bool = False,
+):
     if target_config.suffix.lower() in {".yaml", ".yml"}:
         log_warn(f"Skipping YAML config {target_config}; installer writes JSON MCP configs only.")
         return
@@ -109,14 +135,16 @@ def register_mcp_config(target_config: Path, server_script_path: Path, db_path: 
             with open(target_config, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
-            data = {}
+            log_warn(f"Skipping {target_config}; existing file is not valid JSON (will not overwrite).")
+            return
 
     if "mcpServers" not in data:
         data["mcpServers"] = {}
 
+    args = ["-m", "soul_mcp_server"] if use_module else [str(server_script_path.resolve())]
     data["mcpServers"]["soul"] = {
         "command": python_exe,
-        "args": [str(server_script_path.resolve())],
+        "args": args,
         "env": {
             "SOUL_DB_PATH": str(db_path.resolve())
         }
@@ -128,35 +156,61 @@ def register_mcp_config(target_config: Path, server_script_path: Path, db_path: 
     log_ok(f"Registered 'soul' MCP server into {target_config}")
 
 
+def write_tool_schemas(target_schema_dir: Path) -> int:
+    """Write live MCP tool contracts so Antigravity/schema copies cannot drift."""
+    from soul_mcp_server import TOOLS
+    target_schema_dir.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for tool in TOOLS:
+        payload = {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": tool["inputSchema"],
+        }
+        dest = target_schema_dir / f"{tool['name']}.json"
+        dest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        n += 1
+    return n
+
+
 def copy_schemas_if_needed(target_schema_dir: Path):
-    src_dir = Path(__file__).parent / "schemas"
-    if src_dir.exists() and src_dir.is_dir():
-        target_schema_dir.mkdir(parents=True, exist_ok=True)
-        for schema_file in src_dir.glob("*.json"):
-            shutil.copy(schema_file, target_schema_dir / schema_file.name)
-        n = len(list(src_dir.glob("*.json")))
-        log_ok(f"Copied {n} MCP JSON schemas to {target_schema_dir}")
+    repo_schemas = Path(__file__).resolve().parent / "schemas"
+    try:
+        n = write_tool_schemas(target_schema_dir)
+        log_ok(f"Wrote {n} MCP JSON schemas to {target_schema_dir}")
+        return
+    except Exception as exc:
+        log_warn(f"Could not write live schemas ({exc}); copying repo snapshots if present.")
+        if repo_schemas.exists() and repo_schemas.is_dir():
+            target_schema_dir.mkdir(parents=True, exist_ok=True)
+            for schema_file in repo_schemas.glob("*.json"):
+                shutil.copy(schema_file, target_schema_dir / schema_file.name)
+            log_ok(f"Copied {len(list(repo_schemas.glob('*.json')))} MCP JSON schemas to {target_schema_dir}")
 
 
-def seal_skill_user_dirs() -> list[Path]:
-    """Standard Agent Skills dirs. Same SKILL.md; any machine that runs install.py."""
+def skill_user_dirs(name: str) -> list[Path]:
     home = Path.home()
     return [
-        home / ".claude" / "skills" / "soul-seal",
-        home / ".hermes" / "skills" / "soul-seal",
-        home / ".cursor" / "skills" / "soul-seal",
-        home / ".gemini" / "config" / "skills" / "soul-seal",
-        home / ".gemini" / "antigravity-cli" / "skills" / "soul-seal",
-        home / ".agents" / "skills" / "soul-seal",
-        home / ".pi" / "agent" / "skills" / "soul-seal",
+        home / ".claude" / "skills" / name,
+        home / ".hermes" / "skills" / name,
+        home / ".cursor" / "skills" / name,
+        home / ".gemini" / "config" / "skills" / name,
+        home / ".gemini" / "antigravity-cli" / "skills" / name,
+        home / ".agents" / "skills" / name,
+        home / ".pi" / "agent" / "skills" / name,
     ]
 
 
-def _seal_skill_src(repo_root: Path) -> Path | None:
+def seal_skill_user_dirs() -> list[Path]:
+    """soul-seal dirs (tests import this name)."""
+    return skill_user_dirs("soul-seal")
+
+
+def _skill_src(repo_root: Path, name: str) -> Path | None:
     candidates = [
-        Path(__file__).resolve().parent / "skills" / "soul-seal" / "SKILL.md",
-        repo_root / "skills" / "soul-seal" / "SKILL.md",
-        Path(sys.prefix) / "share" / "soul-engine" / "skills" / "soul-seal" / "SKILL.md",
+        Path(__file__).resolve().parent / "skills" / name / "SKILL.md",
+        repo_root / "skills" / name / "SKILL.md",
+        Path(sys.prefix) / "share" / "soul-engine" / "skills" / name / "SKILL.md",
     ]
     for p in candidates:
         if p.is_file():
@@ -164,16 +218,21 @@ def _seal_skill_src(repo_root: Path) -> Path | None:
     return None
 
 
+def _seal_skill_src(repo_root: Path) -> Path | None:
+    return _skill_src(repo_root, "soul-seal")
+
+
 def install_seal_skill(repo_root: Path):
-    """Copy the published soul-seal skill into standard user skill dirs (any machine that runs install.py)."""
-    src = _seal_skill_src(repo_root)
-    if src is None:
-        log_warn("skills/soul-seal/SKILL.md missing; skip skill install")
-        return
-    for dest in seal_skill_user_dirs():
-        dest.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest / "SKILL.md")
-        log_ok(f"Installed soul-seal skill at {dest}")
+    """Copy soul-seal and seacom into standard user skill dirs."""
+    for name in ("soul-seal", "seacom"):
+        src = _skill_src(repo_root, name)
+        if src is None:
+            log_warn(f"skills/{name}/SKILL.md missing; skip")
+            continue
+        for dest in skill_user_dirs(name):
+            dest.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest / "SKILL.md")
+            log_ok(f"Installed {name} skill at {dest}")
 
 
 def main():
@@ -184,12 +243,13 @@ def main():
     parser.add_argument("--no-deps", action="store_true", help="Skip pip dependencies installation")
     args = parser.parse_args()
 
-    # 1. Dependencies
+    pip_ok = False
     if not args.no_deps:
-        install_dependencies()
+        pip_ok = install_dependencies()
 
-    # 2. Database
+    # 2. Database & Admin Secret Key
     db_path = Path(args.db_path).resolve()
+    init_admin_key(db_path.parent)
     kernel = init_database(db_path)
 
     # 3. Server Script Path
@@ -208,7 +268,7 @@ def main():
 
     for cfg in target_configs:
         try:
-            register_mcp_config(cfg, server_script, db_path, python_exe)
+            register_mcp_config(cfg, server_script, db_path, python_exe, use_module=pip_ok)
         except Exception as exc:
             log_warn(f"Could not register into {cfg}: {exc}")
 
@@ -218,13 +278,15 @@ def main():
 
     # 6. Same SEAL skill for Claude / Hermes / Cursor (MCP initialize covers every client)
     install_seal_skill(Path(__file__).parent.resolve())
+    kernel.close()
 
     print("\n" + "=" * 70)
     print("                SOUL MCP SERVER INSTALLATION COMPLETE                ")
     print(f" • Server Script   : {server_script}")
     print(f" • SQLite Database : {db_path}")
     print(f" • Python Executable: {python_exe}")
-    print(" • Registered Tools: 20 Active MCP Tools (12 Core + 8 Review Cycle)")
+    print(" • MCP args        : python -m soul_mcp_server" if pip_ok else f" • MCP args        : {server_script}")
+    print(" • Registered Tools: 23 Active MCP Tools (14 Core + 9 Review Cycle)")
     print("=" * 70 + "\n")
 
 

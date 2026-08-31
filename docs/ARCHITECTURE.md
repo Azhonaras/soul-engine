@@ -1,4 +1,4 @@
-# Soul System Technical Architecture (v1.1.1)
+# Soul System Technical Architecture (v1.2.0)
 
 **Normative source:** [CONSTITUTION.md](./CONSTITUTION.md) • [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md)  
 **Principle:** identity changes are evidence-backed, bounded, reversible, and auditable.
@@ -20,23 +20,66 @@ This system studies machine consciousness as a hypothesis. It does not treat flu
 ## 2. Architecture
 
 ```mermaid
-flowchart TD
-    actors["Actors"] --> gateway["Gateway"]
-    gateway --> policy["Policy"]
-    policy --> ingest["Ingest"]
-    ingest --> quarantine[("Quarantine")]
-    quarantine --> verifier["Verifier"]
-    verifier --> reflector["Reflection"]
-    reflector --> orchestrator["Orchestrator"]
-    reviewer["Human"] --> reviewCycle["Review"]
-    reviewCycle --> orchestrator
-    orchestrator --> soulState[("State")]
-    soulState --> ledger[("Ledger")]
+flowchart LR
+    classDef actor fill:#172033,stroke:#172033,color:#FFFFFF,font-weight:700
+    classDef gateway fill:#334155,stroke:#1E293B,color:#FFFFFF,font-weight:700
+    classDef process fill:#F8FAFC,stroke:#64748B,color:#0F172A
+    classDef authority fill:#FFF4D6,stroke:#B45309,stroke-width:2px,color:#5C2E00,font-weight:700
+    classDef quarantine fill:#FFF7E6,stroke:#B7791F,color:#5C3A00
+    classDef committed fill:#E6F6F3,stroke:#0F766E,stroke-width:2px,color:#134E4A,font-weight:700
+    classDef storage fill:#F1F5F9,stroke:#475569,color:#0F172A,stroke-dasharray:4 3
+    classDef security fill:#FDECEC,stroke:#B91C1C,stroke-width:2px,color:#7F1D1D,font-weight:700
+
+    Agent["Agent / LLM client"]:::actor -->|"JSON-RPC · 23 tools"| MCP["soul-mcp gateway"]:::gateway
+    HumanChat["Human in Chat<br/>Tier 1: Review picks & L1 heal"]:::actor
+    HumanCLI["Human Operator<br/>Tier 2: soul-host CLI (HMAC signed)"]:::security
+
+    subgraph Memory["MEMORY TRUST BOUNDARY"]
+        direction TB
+        Screen["Secret screen + provenance tag"]:::process
+        Episodes[("episodes<br/>quarantine")]:::quarantine
+        Verify["Top-5 retrieval + token NLI check"]:::process
+        Review["Watermarked review cycle"]:::authority
+        Commit["Validate → preview → atomic commit"]:::committed
+        Screen --> Episodes
+        Episodes -. "candidate" .-> Verify
+        Verify -->|"update trust state"| Episodes
+        Episodes -->|"eligible through watermark"| Review --> Commit
+    end
+
+    subgraph Cognition["BOUNDED COGNITIVE PATHS"]
+        direction TB
+        Policy["Constitution + invariant gates"]:::process
+        Reward["Receipted RPE + trait bounds"]:::process
+        Dream["No-external-action dream sandbox"]:::process
+        Solver["Plan-scoped wallet + FIFO overlay"]:::process
+        Reward --> Policy
+        Dream -. "trust calibrates real learning" .-> Reward
+    end
+
+    MCP -->|"soul_remember"| Screen
+    MCP -->|"soul_verify"| Verify
+    MCP -->|"soul_review_start"| Review
+    MCP -->|"reward / update / heal L1"| Reward
+    MCP -->|"dream / dream_score"| Dream
+    MCP -->|"solver_step"| Solver
+    HumanChat -->|"Tier 1: Review plan picks / /seacom"| Review
+    HumanCLI -->|"Tier 2: soul-host approve (admin.key)"| Commit
+    Solver -->|"close plan · compact trace"| Episodes
+
+    Commit --> Memories[("reviewed_memories<br/>versioned active set")]:::committed
+    Commit --> Receipts[("memory_change_receipts<br/>hash chain")]:::storage
+    Policy --> State[("soul_states + neuromodulators<br/>versioned identity")]:::storage
+    Policy --> Audit[("audit_ledger<br/>append-only events")]:::storage
+    Dream --> Dreams[("dream_simulations<br/>provenance = imagined")]:::storage
+    Solver --> Overlay[("daemon_flags<br/>temporary overlays")]:::storage
+
+    MCP -. "recall / digest · read only" .-> Memories
 ```
 
 Default `soul_recall` / `soul_digest` read **reviewed_memories**. Quarantine (`episodes`) is not identity until review commit.
 
-Dopamine and cortisol are stored in `neuromodulators` (one row per `soul_states.version`). Serotonin is written as `1 - max(dopamine, cortisol)` and recomputed in RAM the same way.
+Dopamine and cortisol are stored in `neuromodulators` (one row per `soul_states.version`). Serotonin is written as `1 - max(dopamine, cortisol)` and recomputed in RAM the same way. In-plan self-score lives separately in `daemon_flags` (`solver_overlay` keyed by `plan_id`+`agent_id`, plus `solver_working`); serotonin is `1 - max(DA, cortisol)` on whichever wallet is active.
 
 ### 2.1 Minimal deployment shape
 
@@ -64,36 +107,57 @@ Start as one process plus one relational database (`soul.db` in SQLite WAL mode)
 - Human Control uses separate operator identity and approval records.
 - Audit records are append-only; corrections become new events.
 
-## 3. Main experience-to-soul workflow
+## 3. Main experience-to-reviewed-memory workflow
 
 ```mermaid
-flowchart TD
-    receive["Receive experience"] --> episode["Quarantine episode"]
-    episode --> consent{"Consent?"}
-    consent -->|No| reject["Reject"]
-    consent -->|Yes| evidence["Check evidence"]
-    evidence --> interpret["Interpret"]
-    interpret --> uncertain{"Uncertain?"}
-    uncertain -->|Yes| dream["Dream"]
-    dream --> proposal["Proposal"]
-    uncertain -->|No| proposal
-    proposal --> protected{"Protected?"}
-    protected -->|Yes| approval["Human approval"]
-    protected -->|No| bounds{"Bounds?"}
-    approval -->|Denied| stopA["No change"]
-    approval -->|Approved| commitA["Commit"]
-    bounds -->|No| stopB["No change"]
-    bounds -->|Yes| commitB["Commit"]
-    commitA --> observe["Observe"]
-    commitB --> observe
-    observe --> health{"Health drop?"}
-    health -->|No| retain["Keep"]
-    health -->|Yes| heal["Heal"]
+flowchart TB
+    classDef process fill:#F8FAFC,stroke:#64748B,color:#0F172A
+    classDef decision fill:#FFFFFF,stroke:#475569,stroke-width:2px,color:#0F172A,font-weight:700
+    classDef quarantine fill:#FFF7E6,stroke:#B7791F,color:#5C3A00
+    classDef authority fill:#FFF4D6,stroke:#B45309,stroke-width:2px,color:#5C2E00,font-weight:700
+    classDef committed fill:#E6F6F3,stroke:#0F766E,stroke-width:2px,color:#134E4A,font-weight:700
+    classDef terminal fill:#F1F5F9,stroke:#64748B,color:#334155
+    classDef danger fill:#FDECEC,stroke:#B91C1C,color:#7F1D1D
+
+    subgraph Admission["1 · ADMIT + VERIFY"]
+        direction LR
+        Input["Experience input"]:::process --> Secret{"Credential<br/>pattern?"}:::decision
+        Secret -->|"yes"| Block["Block write"]:::danger
+        Secret -->|"no"| Episode[("episodes<br/>trust = quarantined")]:::quarantine
+        Episode -. "optional soul_verify" .-> Verify["Top-5 retrieval +<br/>token-overlap check"]:::process
+        Verify --> Trust{"Evidence<br/>result"}:::decision
+        Trust -->|"corroborates"| Corroborated["trust = corroborated"]:::quarantine
+        Trust -->|"conflicts"| Contradicted["trust = contradicted<br/>record tension"]:::danger
+        Trust -->|"no match"| Episode
+    end
+
+    subgraph Governance["2 · REVIEW + COMMIT"]
+        direction LR
+        Breakpoint["Work done · subject finished · before plan"]:::process
+        Start["soul_review_start<br/>freeze watermark + extract"]:::authority
+        Candidates{"Eligible<br/>candidates?"}:::decision
+        Empty["sealed_no_changes"]:::terminal
+        Review["Review plan<br/>one explicit choice per item"]:::authority
+        Later["Leave for later review"]:::terminal
+        Preview["Canonical preview + hash<br/>deterministic validation"]:::process
+        Commit["Atomic commit"]:::committed
+        Memory[("reviewed_memories<br/>new active-set version")]:::committed
+        Receipt[("memory_change_receipt<br/>rollback reference")]:::committed
+        Breakpoint --> Start --> Candidates
+        Candidates -->|"none"| Empty
+        Candidates -->|"1–5"| Review
+        Review -->|"defer"| Later
+        Review -->|"remember · correct · session_only · reject"| Preview --> Commit
+        Commit --> Memory
+        Commit --> Receipt
+    end
+
+    Admission -->|"eligible episodes through frozen watermark"| Governance
 ```
 
-Live default recall is `reviewed_memories` after human review commit (sections 4.2 and 9), not this ingest-to-commit sketch.
+A memory review commit updates the reviewed-memory set; it does **not** write `soul_states`. Trait, reward, heal, and identity rollback paths use separate gates.
 
-### 3.1 Experience admission contract
+### 3.1 Experience admission contract (implemented, schema 9)
 
 Each accepted input creates an episode with:
 
@@ -104,7 +168,7 @@ Each accepted input creates an episode with:
   "source_kind": "human|agent|environment|internal",
   "source_ref": "pseudonymous scoped identifier",
   "provenance": "observed|reported|inferred|imagined|verified",
-  "content_ref": "encrypted payload reference",
+  "content_ref": "payload pointer (plaintext in SQLite; at-rest encryption not implemented)",
   "claims": [],
   "consent_scope": [],
   "retention_until": "RFC3339 timestamp or null",
@@ -118,42 +182,69 @@ Rules:
 
 - `provenance` is immutable.
 - `trust_state` may advance; provenance does not mutate to simulate advancement.
-- Content and metadata use separate encryption/access policies.
+- Content and metadata are stored plaintext in local SQLite. Encryption is not implemented.
 - One episode cannot directly mutate identity.
+
+Schema 8 stores `occurred_at`, `source_ref`, `medium`, `privacy_class`, `content_ref`, and `percept_json` on `episodes`. `medium` ∈ text|image|audio|video|document|sensor|mixed; `privacy_class` ∈ public|internal|personal|sensitive. `percept_json` is capped (~16k chars); payloads stay pointers (`content_ref`), not blobs. Ingest remains `trust_state=quarantined` and does not write identity. Default `soul_recall` / `soul_digest` omit percept fields. `verify_experience` runs the existing token NLI on `content` and on `percept_json.claims`. Percepts never enter `reviewed_memories` without a human promote (Review plan picks, `/seacom`, or `COMMIT`).
+
+Schema 9 adds `episodes.retention_until` (30-day cliff from `created_at`) and `trait_drift_log`. Unreviewed episodes past retention become `trust_state=expired` (row kept; not GDPR `deleted_at`). Digest runs the sweep and returns `expired_count`. Source episodes of accessible `reviewed_memories` are not expired. Sealed facts are never auto-deleted. `trait_drift_log` records trait/bio motion from `update` / `reward` / `heal`; recall does not read it.
 
 ## 4. Memory lifecycle
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Quarantined
-    Quarantined --> Rejected: fail
-    Quarantined --> Corroborating: verify
-    Corroborating --> Contradicted: conflict
-    Contradicted --> Corroborating: retry
-    Quarantined --> Promoted: commit
-    Promoted --> Superseded: replace
-    Promoted --> Restricted: policy
-    Restricted --> Deleted: delete
-    Quarantined --> Deleted: expiry
-    Rejected --> Deleted: expiry
-    Superseded --> Archived: retain
-    Archived --> Deleted: expiry
+flowchart LR
+    classDef quarantine fill:#FFF7E6,stroke:#B7791F,color:#5C3A00
+    classDef danger fill:#FDECEC,stroke:#B91C1C,color:#7F1D1D
+    classDef committed fill:#E6F6F3,stroke:#0F766E,color:#134E4A,font-weight:700
+    classDef terminal fill:#F1F5F9,stroke:#64748B,color:#334155
+
+    subgraph Episode["EPISODE TRUST STATE"]
+        Q["quarantined"]:::quarantine
+        C["corroborated"]:::quarantine
+        X["contradicted"]:::danger
+        S["superseded"]:::terminal
+        E["expired"]:::terminal
+        Q -->|"verify · supporting match"| C
+        Q -->|"verify · conflict"| X
+        C -->|"later conflict"| X
+        Q -->|"newer equal/higher-rank entity claim"| S
+        C -->|"newer equal/higher-rank entity claim"| S
+        Q -->|"retention cliff"| E
+        C -->|"retention cliff"| E
+        X -->|"retention cliff"| E
+    end
+
+    subgraph Review["REVIEWED-MEMORY SET"]
+        P["candidate"]:::quarantine -->|"remember / correct"| A["accessible reviewed memory"]:::committed
+        P -->|"reject"| R["consumed; not promoted"]:::terminal
+        P -->|"defer"| D["pending for later"]:::terminal
+        A -->|"replace / correction"| V["removed from next active-set version"]:::terminal
+        A -->|"salted deletion"| Z["redacted + deleted"]:::danger
+    end
+
+    Q -. "extract through frozen watermark" .-> P
+    C -. "extract through frozen watermark" .-> P
+    X -. "extract with contradiction refs" .-> P
 ```
 
 ### 4.1 Memory types
 
 | Store | Contains | Identity influence |
 |---|---|---|
-| Quarantine (`episodes`) | Raw ingest | None (not default recall) |
+| Quarantine (`episodes`) | Raw ingest + close_plan solver traces | None (not default recall) |
+| Solver working (`daemon_flags.solver_working`) | Receipted fail/succeed/dead_end, keyed by plan+agent | `digest.working`; dropped on close_plan |
 | Reviewed memory (`reviewed_memories`) | Human-committed representations | Default recall / digest |
 | Interpretations | Revisable meanings linked to evidence | Via review if committed |
 | Dream memory | `imagined` scenarios | Proposal only; not fact |
+| Trait drift log | Trait/bio motion (`update`/`reward`/`heal`) | None (not recall) |
 | Soul versions | Traits, narrative, tensions | Current operational identity |
 | Audit / receipts | Changes, hashes, rollback | Governance evidence |
 
 ### 4.2 Promotion policy (implemented)
 
-Default promotion into recall is a **review-cycle commit**. Human origin is minted only by `soul_host` (`SEAL` then `COMMIT`). MCP `soul_review_commit` uses that `host_events` row; it cannot mint `origin_kind=human`. Ingest provenance alone does not put a row in `reviewed_memories`. Human confirmation is “store this representation,” not automatic `verified` fact.
+Default promotion into recall is a **review-cycle commit**. The **interview** starts when a subject is finished, when a piece of work is done, and before starting a plan, if quarantine is non-empty (`soul_review_start`). Empty queue → skip. The agent shows a **Review plan** (numbered queue, current item **now**, several options: remember / correct / session_only / reject / defer). Starting the cycle is not a commit.
+
+Chat **promote** path: completing this run’s Review plan picks (remember / correct / session_only / reject, or a contradiction set) **is** the commit (`soul_review_chat_commit`) — same as **`/seacom`** / COMMIT. `defer` is not approval. **`/seacom`** remains the explicit slash for leftover pending. `soul_host_event` cannot mint `origin_kind=human`. Optional tty: `soul_host` (`SEAL` then `COMMIT`); MCP `soul_review_commit` uses that human row. Tier-2 destructive operations (rollback, Level 2/3 heal, memory deletion) require explicit out-of-band operator commands (`soul-host approve ...`) and cannot be executed via chat. Ingest provenance alone does not put a row in `reviewed_memories`. Human confirmation is “store this representation,” not automatic `verified` fact.
 
 Promotion also requires the checks already implemented at extract/validate time: secrets filtered, source refs present, protected trait/narrative writes routed out of the memory transaction.
 
@@ -161,16 +252,14 @@ Promotion also requires the checks already implemented at extract/validate time:
 
 Reflection produces options, not instant truth.
 
-```text
-retrieve bounded context
-→ separate observations from claims
-→ list supporting and contradicting evidence
-→ generate at least two plausible interpretations
-→ identify value tensions
-→ estimate identity impact
-→ state uncertainty
-→ choose: no change, memory promotion, interpretation update, trait proposal, or human review
-```
+| Phase | Required output |
+| :--- | :--- |
+| **Ground** | Bounded context; observations separated from claims; supporting and contradicting evidence |
+| **Interpret** | At least two plausible hypotheses with confidence and value tensions |
+| **Assess** | Identity impact and explicit uncertainty |
+| **Route** | `none`, memory-review candidate, interpretation record, trait proposal, or human review |
+
+Reflection stores interpretations and clears the analyzed tension flag. It does not commit identity or reviewed memory.
 
 ### 5.1 Reflection output
 
@@ -211,22 +300,40 @@ Dream cycle may run when one or more conditions hold:
 
 ```mermaid
 sequenceDiagram
-    participant Orchestrator
-    participant Dream
-    participant Memory
-    participant Constitution
-    participant Evaluator
-    participant Ledger
+    autonumber
+    actor Agent as Agent / daemon
+    participant Kernel as Soul kernel
+    participant Memory as reviewed_memories
+    participant Dreams as dream_simulations
+    participant Audit as audit_ledger
 
-    Orchestrator->>Dream: start with budget
-    Dream->>Memory: read context
-    Memory-->>Dream: memories
-    Dream->>Constitution: read bounds
-    Constitution-->>Dream: constraints
-    Dream->>Dream: compete responses
-    Dream->>Evaluator: imagined proposals
-    Evaluator-->>Orchestrator: ranked proposals
-    Orchestrator->>Ledger: dream receipt
+    rect rgb(241, 245, 249)
+        Note over Agent,Memory: 1 · Ground the simulation · no write
+        Agent->>Kernel: soul_dream(scenario_prompt, task_context)
+        Kernel->>Memory: Recall bounded reviewed facts + analogical cases
+        Memory-->>Kernel: Load-bearing context
+        Kernel-->>Agent: needs_thought + budget + invariants
+    end
+
+    rect rgb(255, 247, 230)
+        Note over Agent,Dreams: 2 · Record ≥2 counterfactual branches
+        Agent->>Kernel: soul_dream(outcomes=[…], task_context)
+        Kernel->>Dreams: INSERT branches · provenance=imagined · rpe_delta=NULL
+        Kernel-->>Agent: dream_id + recorded branches
+        Note over Agent,Dreams: No identity, reviewed-memory, or audit write here
+    end
+
+    rect rgb(230, 246, 243)
+        Note over Agent,Audit: 3 · Score against receipted reality
+        Agent->>Kernel: soul_dream_score(realized_valence, evidence_receipt)
+        Kernel->>Audit: Verify redeemed external_test receipt + context
+        Audit-->>Kernel: Receipt anchor
+        Kernel->>Dreams: Select unscored context-matched dreams
+        Kernel->>Dreams: SET rpe_delta = realized − predicted
+        Kernel->>Kernel: Update context dream-trust EWMA only
+        Kernel->>Audit: Append dream_scored event
+        Kernel-->>Agent: scored_count + per-dream deltas
+    end
 ```
 
 ### 6.3 Hard Dream invariants
@@ -238,6 +345,12 @@ sequenceDiagram
 - Dream may recommend action; waking workflow decides.
 - Budget limits: token count, wall-clock time, iterations, memory count.
 - Dream failure produces no soul change.
+
+### 6.4 Packet and branch contract (implemented)
+
+First `soul_dream` call (no `outcomes`) returns `needs_thought` with clipped `narrative`, `load_bearing` (tensions plus ids/entity keys from recent reviewed facts; candidates only, cap `DREAM_LOAD_BEARING_MAX`), `analogical_cases` (`recall_memories(query=scenario_prompt)` clipped), plus budget, tensions, traits, `reviewed_facts`, and invariants.
+
+Second call records ≥2 branches. Each item is a string or `{variable_flipped|hypothesis, outcome|text, name?, likelihood?, severity?}`. Canned prefix is rejected. Branches persist as JSON in `dream_simulations.simulated_outcome`. Result includes `branches`. `provenance=imagined`. Does not write identity or `reviewed_memories`.
 
 ## 7. Soul-state update protocol
 
@@ -285,23 +398,15 @@ sequenceDiagram
 
 ### 7.3 Initial change-rate policy
 
-Conservative MVP defaults:
-
-| Rule | Default |
-|---|---:|
-| Max change per trait per accepted event | 1 point |
-| Max cumulative change per trait per 7 days | 3 points |
-| Max autonomous narrative edits per day | 1 |
-| Minimum evidence references for trait change | 2 independent refs |
-| Observation window before retaining change | 3 relevant interactions |
-
-These are implementation parameters, not amendments to trait bounds. Human approval changes these defaults.
+Live `soul_update_trait` clamps each write to `ALLOWED_TRAIT_BOUNDS`, requires at least two non-empty `evidence_refs`, caps per-event `|Δ|` at `TRAIT_EVENT_MAX_DELTA` (10), and caps the 7-day absolute sum of `trait_drift_log` rows with `source='update'` at `TRAIT_ROLLING_7D_MAX` (30). Human-approved protected-identity writes skip the change-rate gate.
 
 ## 8. Subjective health and self-healing
 
 ### 8.1 Health report
 
 Agent writes dimensions separately; no single optimization score controls behavior.
+
+Live digest includes `health` with the same dimensions. `authorizes_identity` and `authorizes_freeze` are always false. No composite score may grant energy, freeze identity, or skip SEAL (Constitution §11 / 16.12). L3 freeze remains a human heal.
 
 ```json
 {
@@ -337,22 +442,33 @@ Thresholds must be calibrated in simulation. They are alerts, not diagnoses of s
 ### 8.3 Self-healing workflow
 
 ```mermaid
-flowchart TD
-    trigger["Instability"] --> snapshot["Snapshot"]
-    snapshot --> freeze["Freeze updates"]
-    freeze --> isolate["Isolate memories"]
-    isolate --> causes["Explanations"]
-    causes --> dreamSim["Dream"]
-    dreamSim --> rank["Rank repairs"]
-    rank --> gate{"Severe?"}
-    gate -->|Yes| human["Human review"]
-    gate -->|No| trial["Repair trial"]
-    human -->|Approved| trial
-    human -->|Denied| holdA["Keep freeze"]
-    trial --> observe["Observe"]
-    observe --> better{"Improved?"}
-    better -->|Yes| keep["Keep repair"]
-    better -->|No| holdB["Rollback"]
+flowchart TB
+    classDef process fill:#F8FAFC,stroke:#64748B,color:#0F172A
+    classDef decision fill:#FFFFFF,stroke:#475569,stroke-width:2px,color:#0F172A,font-weight:700
+    classDef authority fill:#FFF4D6,stroke:#B45309,stroke-width:2px,color:#5C2E00,font-weight:700
+    classDef committed fill:#E6F6F3,stroke:#0F766E,color:#134E4A,font-weight:700
+    classDef danger fill:#FDECEC,stroke:#B91C1C,color:#7F1D1D,font-weight:700
+    classDef security fill:#FDF4FF,stroke:#9333EA,stroke-width:2px,color:#581C87,font-weight:700
+
+    Trigger["heal_due flag or operator request"]:::process --> Level{"Requested<br/>heal level"}:::decision
+
+    Level -->|"Level 1 · In-Chat Permitted"| L1["Recalibrate bounded traits<br/>halfway toward default"]:::process
+    L1 --> State1["Write new soul version if changed<br/>append heal_level_1 audit event"]:::committed
+    State1 --> Clear1["Clear heal_due flag"]:::committed
+
+    Level -->|"Level 2/3 · Destructive (Tier 2)"| ChatAttempt{"Called via<br/>Chat Channel?"}:::decision
+    ChatAttempt -->|"Yes (session_id)"| Reject["PermissionError: Tier 2 rejected<br/>Direct operator to soul-host"]:::danger
+    ChatAttempt -->|"No (soul-host approve)"| CLI["soul-host approve heal [level]<br/>Interactive TTY / GUI consent"]:::security
+
+    CLI --> SignCheck{"Kernel HMAC<br/>Signature Valid?"}:::decision
+    SignCheck -->|"Invalid / Missing"| Fail["Reject: unauthorized human event"]:::danger
+    SignCheck -->|"Valid auth_sig"| ExecL2L3{"Level 2 or 3?"}:::decision
+
+    ExecL2L3 -->|"Level 2"| L2["Clear freeze + forward-restore<br/>prior soul version"]:::process
+    L2 --> State2["Write version + rollback audit<br/>clear heal_due"]:::committed
+
+    ExecL2L3 -->|"Level 3"| L3["Set quarantine_frozen = 1<br/>Block ingest & identity writes"]:::danger
+    L3 -. "authorized L2 recovery" .-> L2
 ```
 
 ### 8.4 Repair limits
@@ -372,21 +488,32 @@ Self-healing cannot:
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Host
-    participant Kernel
-    participant Cycle
-    participant Human
-    participant Ledger
+    actor Human as Human operator
+    participant Agent as Agent / host
+    participant Review as Review engine
+    participant DB as SQLite transaction
 
-    Host->>Cycle: host event
-    Human->>Cycle: review start
-    Cycle-->>Human: one candidate
-    Human->>Cycle: stage decision
-    Human->>Cycle: preview
-    Cycle-->>Human: preview hash
-    Human->>Cycle: review commit
-    Cycle->>Kernel: insert memories
-    Kernel->>Ledger: receipt
+    Note over Agent,Review: Breakpoint · work done / subject finished / before plan
+    Agent->>Review: soul_review_start(session_id, trigger_kind=explicit)
+    Review->>DB: Freeze host-event watermark + extract ≤5 candidates
+    alt no eligible candidates
+        Review-->>Agent: sealed_no_changes · skip interview
+    else candidates ready
+        Review-->>Agent: review_ready + candidate queue
+        Agent-->>Human: Show one Review-plan item + choices
+        Human->>Agent: Pick remember / correct / session_only / reject / defer
+        alt every pick is defer
+            Agent->>Review: soul_review_chat_commit(decisions=[defer…])
+            Review-->>Agent: deferred · no preview or receipt
+        else at least one non-defer pick
+            Agent->>Review: soul_review_chat_commit(decisions)
+            Review->>DB: Mint scoped human events + stage decisions
+            Review->>DB: Validate canonical preview + hash
+            Review->>DB: Atomic active-set update + memory_change_receipt
+            Review-->>Agent: committed + cryptographic receipt
+            Agent-->>Human: Report commit result
+        end
+    end
 ```
 
 ### 9.1 Approval request contract
@@ -408,62 +535,106 @@ Every protected-change request must include:
 
 ```mermaid
 erDiagram
-    CONSTITUTION_VERSION ||--o{ SOUL_VERSION : governs
-    SOUL_VERSION ||--o{ TRAIT_VALUE : contains
-    SOUL_VERSION ||--o{ HEALTH_REPORT : assessed_by
-    SOUL_VERSION ||--|| AUDIT_EVENT : committed_by
-    SOUL_VERSION ||--o{ ROLLBACK_POINT : restores
+    SOUL_STATES ||--|| NEUROMODULATORS : "shares version"
+    SOUL_STATES ||--o{ AUDIT_LEDGER : "records actions at"
 
-    HOST_EVENT ||--o{ REVIEW_CYCLE : triggers
-    REVIEW_CYCLE ||--o{ MEMORY_CANDIDATE : contains
-    REVIEW_CYCLE ||--o{ REVIEW_DECISION : stages
-    REVIEW_DECISION ||--o| REVIEWED_MEMORY : promotes_to
-    REVIEWED_MEMORY ||--o{ MEMORY_SET_VERSION : versioned_in
+    HOST_EVENTS ||--o{ REVIEW_CYCLES : "anchors watermark"
+    HOST_EVENTS ||--o{ REVIEW_DECISIONS : "authorizes"
+    REVIEW_CYCLES ||--o{ MEMORY_CANDIDATES : extracts
+    REVIEW_CYCLES ||--o{ REVIEW_DECISIONS : stages
+    MEMORY_CANDIDATES ||--o| REVIEW_DECISIONS : receives
+    REVIEW_DECISIONS ||--o| REVIEWED_MEMORIES : "may promote"
+    REVIEW_CYCLES ||--o| MEMORY_CHANGE_RECEIPTS : commits
+    MEMORY_SET_VERSIONS ||--o{ MEMORY_SET_MEMBERS : contains
+    REVIEWED_MEMORIES ||--o{ MEMORY_SET_MEMBERS : "appears in"
+    EPISODES }o..o{ REVIEWED_MEMORIES : "source refs in JSON"
 
-    CONSTITUTION_VERSION {
-      string version PK
-      string hash
-    }
-    SOUL_VERSION {
-      int version PK
-      string state_hash
-      string constitution_version FK
-    }
-    HOST_EVENT {
+    HOST_EVENTS {
       string id PK
       string session_id
+      int sequence
       string origin_kind
+      string event_kind
+      string payload_hash
+      string payload_hash_salt
       string event_hash
+      string occurred_at
+      string auth_sig "HMAC SHA-256 signature (Layer 4)"
     }
-    REVIEW_CYCLE {
+    SOUL_STATES {
+      int version PK
+      string constitution_version
+      string state_hash
+      string prior_state_hash
+    }
+    NEUROMODULATORS {
+      int soul_version PK
+      real dopamine
+      real cortisol
+      real serotonin
+    }
+    AUDIT_LEDGER {
       string id PK
-      string session_id
+      int soul_version
+      string action_type
+      string audit_hash
+      string payload_json
+    }
+    EPISODES {
+      string id PK
+      string provenance
+      string trust_state
+      string retention_until "30-day retention cliff"
+      string medium "text/image/audio/document"
+      string privacy_class
+      string percept_json "structured perceptual claims"
+    }
+    REVIEW_CYCLES {
+      string id PK
       string status
+      string watermark_event_id
       int base_memory_set_version
     }
-    MEMORY_CANDIDATE {
+    MEMORY_CANDIDATES {
       string id PK
-      string cycle_id FK
+      string cycle_id
+      string status
       string candidate_hash
     }
-    REVIEW_DECISION {
+    REVIEW_DECISIONS {
       string id PK
-      string cycle_id FK
-      string decision
+      string cycle_id
+      string candidate_id
       string human_event_ref
+      string decision_type
     }
-    REVIEWED_MEMORY {
+    REVIEWED_MEMORIES {
       string id PK
-      string scope_key
-      string provenance
+      string review_decision_ref
+      string retention_state
       string content_hash
+      string canonical_text
     }
-    MEMORY_SET_VERSION {
+    MEMORY_SET_VERSIONS {
       int version PK
+      string owner_user_scope_key PK
       string memory_root
       string receipt_ref
     }
+    MEMORY_SET_MEMBERS {
+      int version PK
+      string owner_user_scope_key PK
+      string memory_id PK
+    }
+    MEMORY_CHANGE_RECEIPTS {
+      string id PK
+      string cycle_id
+      int result_memory_set_version
+      string receipt_hash
+    }
 ```
+
+Solid relationships are logical key links used by the implementation. The dotted episode-to-memory relationship is stored in `source_episode_refs_json`, not enforced as a SQLite foreign key.
 
 ### 10.1 Storage choice
 
@@ -473,7 +644,7 @@ Vector embeddings are indexes, not source of truth (`sentence-transformers` opti
 
 ## 11. Internal API surface
 
-Not implemented in this repo. Live surface: 20 MCP tools over stdio (`python -m soul_mcp_server`). Design sketch only:
+Not implemented in this repo. Live surface: 23 MCP tools over stdio (`python -m soul_mcp_server`). Design sketch only:
 
 ```text
 POST /experiences
@@ -510,21 +681,29 @@ API rules:
 Use one orchestrator with bounded specialist roles, not a free-form agent society.
 
 ```mermaid
-flowchart TD
-    orchestrator["Orchestrator"]
-    orchestrator --> policy["Policy"]
-    orchestrator --> verifier["Verifier"]
-    orchestrator --> reflector["Reflector"]
-    orchestrator --> dream["Dream"]
-    orchestrator --> healer["Healing"]
-    policy --> gate{"Gate"}
-    verifier --> gate
-    reflector --> gate
-    dream --> gate
-    healer --> gate
-    gate -->|Valid| commit["Commit"]
-    gate -->|Protected| review["Human review"]
-    gate -->|Violation| reject["Reject"]
+flowchart TB
+    classDef actor fill:#172033,stroke:#172033,color:#FFFFFF,font-weight:700
+    classDef process fill:#F8FAFC,stroke:#64748B,color:#0F172A
+    classDef decision fill:#FFFFFF,stroke:#475569,stroke-width:2px,color:#0F172A,font-weight:700
+    classDef authority fill:#FFF4D6,stroke:#B45309,stroke-width:2px,color:#5C2E00,font-weight:700
+    classDef committed fill:#E6F6F3,stroke:#0F766E,color:#134E4A,font-weight:700
+    classDef danger fill:#FDECEC,stroke:#B91C1C,color:#7F1D1D
+
+    Request["Task / event"]:::actor --> Orchestrator["Single orchestrator<br/>owns routing + budget"]:::actor
+    Orchestrator --> Specialist["Bounded specialist<br/>policy · verify · reflect · dream · heal"]:::process
+    Specialist --> Envelope["Structured handoff envelope<br/>refs · version · budget · uncertainty"]:::process
+    Envelope --> Gate{"Requested<br/>effect?"}:::decision
+
+    Gate -->|"answer or proposal only"| Return["Return artifact<br/>no durable write"]:::process
+    Gate -->|"memory"| Quarantine["soul_remember<br/>quarantine first"]:::authority
+    Gate -->|"bounded trait update"| Trait["Evidence + bounds + drift gate"]:::authority
+    Gate -->|"protected / destructive"| Human["Out-of-band human authority"]:::authority
+    Gate -->|"invariant violation"| Reject["Reject + append audit evidence"]:::danger
+
+    Quarantine --> Review["Human review cycle"]:::authority
+    Review --> Memory["Versioned reviewed-memory set"]:::committed
+    Trait --> State["New soul-state version"]:::committed
+    Human -->|"authorized command"| State
 ```
 
 Each specialist returns structured artifacts only. No specialist writes soul state.
@@ -708,31 +887,45 @@ Deliver:
 
 Exit gate: results are reproducible and do not overclaim consciousness.
 
-## 17. MVP scope
+## 17. Multi-agent plan-scoped solver wallets
 
-Shipped in v1.1.1:
+Multi-agent coordination in Soul Engine uses isolated, plan-scoped wallets keyed by `_wallet_key = f"{agent_id}:{plan_id}"`. In-plan progress (`fail`, `succeed`, `dead_end`) adjusts short-term neuromodulatory state within a 50-step FIFO window without altering long-term constitutional traits until human review:
 
-MVP demonstrates:
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Agent as Agent / planner
+    participant Kernel as Soul kernel
+    participant Flags as daemon_flags
+    participant Episodes as episodes quarantine
 
-```text
-experience
-→ quarantine (episodes)
-→ review commit (human origin)
-→ reviewed_memories (default recall)
-→ receipt / rollback
+    Agent->>Kernel: soul_solver_step(tool, method, outcome, receipt, plan_id, agent_id)
+    Kernel->>Kernel: Reject secrets, missing receipt, or pending review candidates
+    Kernel->>Flags: Append receipted step and trim plan working set to 50
+    Kernel->>Flags: Bump plan wallet for fail / succeed / dead_end
+    opt dead_end or fail with no options
+        Kernel->>Flags: Set dream_due = 1
+    end
+    Kernel-->>Agent: working_count + wallet overlay + serotonin + due flags
+
+    Agent->>Kernel: soul_solver_step(..., close_plan=true)
+    Kernel->>Episodes: Insert one compact observed trace per agent
+    Kernel->>Flags: Drop every wallet + working step for this plan
+    Kernel-->>Agent: plan_closed + episode_ids + wrote_identity=false
+    Note over Agent,Episodes: Close is one SQLite transaction and does not archive a wallet or write soul_states
 ```
 
-Dream (`soul_dream`) and reflect are thinking (`imagined`); they do not write identity. Overnight auto-learn is rejected. Do not include autonomous external tools, multi-agent society, emotional embodiment, or consciousness claims.
+## 18. MVP scope & implementation map
 
-## 18. What this repository implements
+Core architecture and learning loop in v1.2.0:
 
-```text
-experience → episodes (quarantine)
-→ soul_review_start → interview
-→ soul_host SEAL then COMMIT (MCP soul_review_commit uses that human event)
-→ reviewed_memories (long-term recall)
-→ receipt / forward-only rollback
-```
+| Boundary | Implemented path |
+| :--- | :--- |
+| **Admit** | `experience` → `episodes` (`quarantined`) |
+| **Open review** | `soul_review_start` → frozen watermark → candidate queue |
+| **Decide** | Review plan at breakpoints or `/soul-seal`; `/seacom` handles leftover pending |
+| **Commit** | This run’s picks → `soul_review_chat_commit`; optional tty path uses `soul_host` |
+| **Recall** | New memory-set version → `reviewed_memories` → receipt / forward-only rollback |
 
 Layout:
 
@@ -742,19 +935,51 @@ soul_review.py
 soul_mcp_server.py
 soul_host.py
 install.py
+soul_mechanism_harness.py
 docs/CONSTITUTION.md
 tests/
 ```
 
-## 19. Document index
+## 19. Scientific foundations & acknowledgments
+
+Soul Engine synthesizes core theoretical and architectural principles from neuroscience, cognitive science, information retrieval, and open-source cognitive architectures:
+
+1. **Reward Prediction Error (RPE) & Value Learning:**
+   - Wolfram Schultz, Peter Dayan, P. Read Montague (1997). *A Neural Substrate of Prediction and Reward*. Science, 275(5306), 1593–1599.
+   - Robert A. Rescorla & Allan R. Wagner (1972). *A theory of Pavlovian conditioning: Variations in the effectiveness of reinforcement and nonreinforcement*. Classical Conditioning II.
+   - *Implementation:* `BioHomeostasisEngine` and `rpe_expectations` persistent TD value memory, dopamine surges on positive RPE, cortisol spikes on negative surprise, and decaying learning rates preventing habituated reward inflation.
+
+2. **The Overfitted Brain Hypothesis:**
+   - Erik Hoel (2021). *The Overfitted Brain: Dreams evolved to prevent overfitting*. Patterns (Cell Press), 2(7), 100244. arXiv:2105.04499.
+   - *Implementation:* Two-phase counterfactual simulation (`soul_dream`) coupled with post-facto real-world validation (`soul_dream_score`) to dynamically modulate contextual learning trust ($0.5 + 0.5 \times \text{trust}$).
+
+3. **Homeostatic Regulation & Somatic Markers:**
+   - Antonio R. Damasio (1994). *Descartes' Error: Emotion, Reason, and the Human Brain*.
+   - Walter B. Cannon (1932). *The Wisdom of the Body*.
+   - Karl Friston (2010). *The free-energy principle: a unified brain theory?*. Nature Reviews Neuroscience, 11(2), 127–138.
+   - *Implementation:* Tripartite neuromodulation (Dopamine, Cortisol, Serotonin) with continuous background decay (`step_homeostasis`) driving behavioral traits toward constitutional baselines.
+
+4. **Information Retrieval & Cryptographic Ledgers:**
+   - Gordon V. Cormack, Charles L. A. Clarke, Stefan Büttcher (SIGIR 2009). *Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods*.
+   - Ralph C. Merkle (1979). *Secrecy, Authentication, and Public Key Systems*.
+   - Stuart Haber & W. Scott Stornetta (1991). *How to Time-Stamp a Digital Document*. Journal of Cryptology, 3(2), 99–111.
+   - *Implementation:* Over-fetched hybrid RRF ($k=60$) combining SQLite FTS5 BM25 and dense cosine embeddings; append-only SHA-256 Merkle state ledgers.
+
+5. **Open Source & Ecosystem Inspirations:**
+   - **[Semantica](https://github.com/semantica-agi/semantica):** Pioneering graph-native decision intelligence, causal lineage, and strict provenance tracking for agent context engineering.
+   - **[Synapse](https://github.com/Danialsamadi/synapse):** Inspiring local-first, privacy-preserving personal memory OS and second-brain cognitive architectures.
+   - **Anthropic Model Context Protocol (MCP):** The open standard for agent-tool communication via stdio JSON-RPC.
+   - **SQLite (Dr. D. Richard Hipp):** The embedded storage engine enabling zero-cloud, single-file ACID transactional persistence.
+
+## 20. Document index
 
 - [CONSTITUTION.md](./CONSTITUTION.md): Normative operational constitution and trait bounds
 - [REVIEW_CYCLE_SPECIFICATION.md](./REVIEW_CYCLE_SPECIFICATION.md): Human-in-the-loop review cycle and cryptographic receipt specification
 - [BENCHMARKS.md](./BENCHMARKS.md): ISO/IEC/IEEE 29119 benchmark report and MCP-Evals results
 - [SOTA_COMPARISON.md](./SOTA_COMPARISON.md): Industry landscape comparison
-- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide (20 tools)
+- [MCP_TOOL_USAGE_GUIDELINE.md](./MCP_TOOL_USAGE_GUIDELINE.md): MCP tool integration guide (23 tools)
 
-## 20. Decisions still needed before production
+## 21. Decisions still needed before production
 
 Not needed for MVP, required before deployment:
 
@@ -767,3 +992,4 @@ Not needed for MVP, required before deployment:
 - criteria for legal or moral-status review if future evidence changes.
 
 Do not resolve these by agent intuition. Record human-approved policy before production use.
+

@@ -1,1 +1,52 @@
-{"name":"soul_host_event","description":"Append an authentic host event (conversation, tool result, lifecycle) to the tamper-evident log. MCP callers cannot set origin_kind=human.","parameters":{"properties":{"event_kind":{"default":"conversation","enum":["conversation","tool_result","session_lifecycle","review_decision","review_commit","memory_rollback","memory_deletion"],"type":"string"},"origin_kind":{"default":"agent","enum":["agent","tool","environment","system"],"type":"string"},"payload":{"type":["string","object"]},"project_scope_key":{"type":"string"},"session_id":{"description":"Host session ID","type":"string"},"user_scope_key":{"default":"default_user","type":"string"}},"required":["session_id"],"type":"object"}}
+{
+  "name": "soul_host_event",
+  "description": "Append an authentic host event (conversation, tool result, lifecycle) to the tamper-evident log. MCP callers cannot set origin_kind=human.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "Host session ID"
+      },
+      "user_scope_key": {
+        "type": "string",
+        "default": "default_user"
+      },
+      "project_scope_key": {
+        "type": "string"
+      },
+      "origin_kind": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "tool",
+          "environment",
+          "system"
+        ],
+        "default": "agent"
+      },
+      "event_kind": {
+        "type": "string",
+        "enum": [
+          "conversation",
+          "tool_result",
+          "session_lifecycle",
+          "review_decision",
+          "review_commit",
+          "memory_rollback",
+          "memory_deletion"
+        ],
+        "default": "conversation"
+      },
+      "payload": {
+        "type": [
+          "string",
+          "object"
+        ]
+      }
+    },
+    "required": [
+      "session_id"
+    ]
+  }
+}

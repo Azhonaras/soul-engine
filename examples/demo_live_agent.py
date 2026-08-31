@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Demo: quarantine vs long-term reviewed memory, plus reward/homeostasis (v1.1.1)."""
+"""Demo: quarantine vs long-term reviewed memory, plus reward/homeostasis (v1.2.0)."""
 
 import json
 import sys
@@ -56,6 +56,7 @@ def main():
 
         print_banner("3. Promote via kernel human events (what soul_host SEAL/COMMIT does)")
         cycle = kernel.start_review_cycle(session_id="demo", trigger_kind="explicit")
+        committed = {}
         if cycle["candidate_count"] < 1:
             print("  Extractor kept no candidates; nothing to promote.")
         else:
@@ -76,7 +77,7 @@ def main():
                 event_kind="review_commit",
                 payload={"preview_hash": preview.get("preview_hash")},
             )
-            kernel.commit_review_cycle(cycle["cycle_id"], commit_human_event_ref=commit_ev.id)
+            committed = kernel.commit_review_cycle(cycle["cycle_id"], commit_human_event_ref=commit_ev.id)
             after = kernel.recall_memories("English", limit=5)
             print(f"  After commit, default recall count: {len(after)}")
             if after:
@@ -95,13 +96,20 @@ def main():
         print_banner("5. Reward (+valence) then failure (-valence)")
         state1 = kernel.process_reward(RewardSignal(
             source="external_test", valence=1.0, confidence=1.0,
-            task_context="demo success",
+            task_context="demo success", evidence_receipt="demo_ok_001",
         ))
         print(format_state(state1, kernel))
-        state2 = kernel.process_reward(RewardSignal(
-            source="external_human", valence=-1.0, confidence=1.0,
-            task_context="demo failure",
-        ))
+        human_rid = committed.get("receipt_id") if cycle["candidate_count"] >= 1 else None
+        if human_rid:
+            state2 = kernel.process_reward(RewardSignal(
+                source="external_human", valence=-1.0, confidence=1.0,
+                task_context="demo failure", review_receipt=human_rid,
+            ), session_id="demo")
+        else:
+            state2 = kernel.process_reward(RewardSignal(
+                source="external_test", valence=-1.0, confidence=1.0,
+                task_context="demo failure", evidence_receipt="demo_fail",
+            ))
         print(format_state(state2, kernel))
 
         print_banner("6. Homeostasis (3 rest steps)")

@@ -1,5 +1,5 @@
 """
-Soul System Model Context Protocol (MCP) Server v1.1.1
+Soul System Model Context Protocol (MCP) Server v1.2.0
 Normative Source: docs/CONSTITUTION.md & docs/REVIEW_CYCLE_SPECIFICATION.md
 """
 
@@ -56,21 +56,48 @@ def _require_human_event(event_id) -> Optional[str]:
 # MCP TOOL HANDLERS
 # ==============================================================================
 
+def _mcp_source_kind(raw) -> str:
+    requested = raw.strip().lower() if isinstance(raw, str) else "agent"
+    if requested == "human":
+        log.warning("Coerced MCP soul_remember source_kind='human' to agent; models cannot self-attest human origin")
+        return "agent"
+    if requested in {"agent", "environment", "internal"}:
+        return requested
+    return "agent"
+
+
+def _mcp_provenance(raw) -> str:
+    requested = raw.strip().lower() if isinstance(raw, str) else "observed"
+    if requested == "verified":
+        log.warning("Coerced MCP soul_remember provenance='verified' to observed; models cannot self-assign verified provenance")
+        return "observed"
+    if requested in {"observed", "reported", "inferred", "imagined"}:
+        return requested
+    return "observed"
+
+
 def _tool_soul_remember(args: dict) -> dict:
     content = args.get("content", "")
     if not content:
         return {"error": "content parameter is required"}
     try:
         ep_input = EpisodeInput(
-            source_kind=args.get("source_kind", "human"),
-            provenance=args.get("provenance", "observed"),
+            source_kind=_mcp_source_kind(args.get("source_kind", "agent")),
+            provenance=_mcp_provenance(args.get("provenance", "observed")),
             content=content,
-            entity_key=args.get("entity_key")
+            entity_key=args.get("entity_key"),
+            occurred_at=args.get("occurred_at"),
+            source_ref=args.get("source_ref"),
+            medium=args.get("medium"),
+            privacy_class=args.get("privacy_class"),
+            content_ref=args.get("content_ref"),
+            percept_json=args.get("percept_json"),
+            session_id=_chat_session(args) or None,
         )
         res = get_kernel().ingest_experience(ep_input)
         return {"status": "success", "result": res}
-    except Exception as exc:
-        return {"status": "rejected", "error": str(exc)}
+    except Exception as extra:
+        return {"status": "rejected", "error": str(extra)}
 
 
 def _tool_soul_get_identity(args: dict) -> dict:
@@ -100,7 +127,13 @@ def _tool_soul_recall(args: dict) -> dict:
         query = args.get("query", "")
         limit = int(args.get("limit", 5))
         search_mode = args.get("search_mode", "rrf_hybrid")
-        memories = get_kernel().recall_memories(query=query, limit=limit, search_mode=search_mode)
+        memories = get_kernel().recall_memories(
+            query=query,
+            limit=limit,
+            search_mode=search_mode,
+            plan_id=str(args.get("plan_id") or "").strip(),
+            agent_id=str(args.get("agent_id") or "").strip(),
+        )
         return {"status": "success", "search_mode": search_mode, "count": len(memories), "memories": memories}
     except Exception as exc:
         return {"error": str(exc)}
@@ -108,8 +141,12 @@ def _tool_soul_recall(args: dict) -> dict:
 
 def _tool_soul_digest(args: dict) -> dict:
     try:
-        limit = int(args.get("limit", 5))
-        digest = get_kernel().get_memory_digest(limit=limit)
+        raw = args.get("limit")
+        digest = get_kernel().get_memory_digest(
+            limit=int(raw) if raw is not None else None,
+            plan_id=str(args.get("plan_id") or "").strip(),
+            agent_id=str(args.get("agent_id") or "").strip(),
+        )
         return {"status": "success", "digest": digest}
     except Exception as exc:
         return {"error": str(exc)}
@@ -128,19 +165,35 @@ def _tool_soul_verify(args: dict) -> dict:
 
 def _tool_soul_reflect(args: dict) -> dict:
     try:
-        res = get_kernel().reflect_and_resolve()
+        res = get_kernel().reflect_and_resolve(interpretations=args.get("interpretations"))
         return {"status": "success", "reflection": res}
     except Exception as exc:
         return {"error": str(exc)}
 
 
 def _tool_soul_dream(args: dict) -> dict:
-    prompt = args.get("scenario_prompt", "")
-    if not prompt:
-        return {"error": "scenario_prompt parameter is required"}
     try:
-        res = get_kernel().run_dream_simulation(scenario_prompt=prompt)
+        res = get_kernel().run_dream_simulation(
+            scenario_prompt=args.get("scenario_prompt") or "",
+            outcomes=args.get("outcomes"),
+            task_context=args.get("task_context") or "",
+        )
         return {"status": "success", "simulation": res}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _tool_soul_dream_score(args: dict) -> dict:
+    """Score pending imagined outcomes against a realized external result."""
+    try:
+        res = get_kernel().score_dreams_against_reality(
+            realized_valence=float(args.get("realized_valence", 0.0)),
+            confidence=float(args.get("confidence", 1.0)),
+            task_context=str(args.get("task_context") or ""),
+            limit=int(args.get("limit", 5)),
+            evidence_receipt=str(args.get("evidence_receipt") or ""),
+        )
+        return {"status": "success", **res}
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -170,11 +223,15 @@ def _tool_soul_update_trait(args: dict) -> dict:
 
 
 def _tool_soul_reward(args: dict) -> dict:
-    source = args.get("source", "external_test")
-    valence = float(args.get("valence", 0.0))
-    confidence = float(args.get("confidence", 1.0))
+    try:
+        source = args.get("source", "external_test")
+        valence = float(args.get("valence", 0.0))
+        confidence = float(args.get("confidence", 1.0))
+    except (TypeError, ValueError):
+        return {"status": "rejected", "error": "valence/confidence must be numbers"}
     task_context = args.get("task_context", "General interaction")
     evidence_receipt = args.get("evidence_receipt")
+    review_receipt = args.get("review_receipt")
 
     try:
         signal = RewardSignal(
@@ -182,22 +239,71 @@ def _tool_soul_reward(args: dict) -> dict:
             valence=max(-1.0, min(1.0, valence)),
             confidence=max(0.0, min(1.0, confidence)),
             task_context=task_context,
-            evidence_receipt=evidence_receipt
+            evidence_receipt=evidence_receipt,
+            review_receipt=review_receipt,
         )
-        new_state = get_kernel().process_reward(signal)
+        new_state = get_kernel().process_reward(
+            signal,
+            session_id=_chat_session(args),
+            plan_id=str(args.get("plan_id") or "").strip(),
+            agent_id=str(args.get("agent_id") or "").strip(),
+            task_id=str(args.get("task_id") or "").strip(),
+        )
         kernel = get_kernel()
-        return {
-            "status": "reward_processed",
-            "soul_version": new_state.soul_version,
-            "updated_traits": new_state.traits,
-            "neuromodulators": {
+        overlay_only = signal.source in ("internal_reflection", "internal_dream")
+        if overlay_only:
+            sess = kernel.get_memory_digest(
+                plan_id=str(args.get("plan_id") or "").strip(),
+                agent_id=str(args.get("agent_id") or "").strip(),
+            )["session_neuromodulators"]
+            nm = {
+                "dopamine": sess["dopamine"],
+                "cortisol": sess["cortisol"],
+                "serotonin": sess["serotonin"],
+            }
+        else:
+            nm = {
                 "dopamine": kernel.bio_engine.dopamine,
                 "cortisol": kernel.bio_engine.cortisol,
-                "serotonin": kernel.bio_engine.serotonin
+                "serotonin": kernel.bio_engine.serotonin,
             }
+        return {
+            "status": "overlay_only" if overlay_only else "reward_processed",
+            "soul_version": new_state.soul_version,
+            "updated_traits": new_state.traits,
+            "wrote_identity": not overlay_only,
+            "neuromodulators": nm
         }
     except Exception as exc:
         return {"status": "rejected", "error": str(exc)}
+
+
+def _tool_soul_solver_step(args: dict) -> dict:
+    try:
+        left = args.get("options_left")
+        if left is not None and not isinstance(left, list):
+            return {"status": "rejected", "error": "options_left must be an array"}
+        res = get_kernel().record_solver_step(
+            tool=str(args.get("tool") or ""),
+            method=str(args.get("method") or ""),
+            outcome=str(args.get("outcome") or ""),
+            receipt=str(args.get("receipt") or ""),
+            session_id=_chat_session(args),
+            plan_id=str(args.get("plan_id") or "").strip(),
+            agent_id=str(args.get("agent_id") or "").strip(),
+            task_id=str(args.get("task_id") or "").strip(),
+            close_plan=bool(args.get("close_plan") or False),
+            error=args.get("error"),
+            options_left=left,
+        )
+        return {"status": "success", "result": res}
+    except Exception as exc:
+        return {"status": "rejected", "error": str(exc)}
+
+
+def _chat_session(args: dict) -> str:
+    sid = args.get("session_id")
+    return sid.strip() if isinstance(sid, str) and sid.strip() else ""
 
 
 def _tool_soul_rollback(args: dict) -> dict:
@@ -205,16 +311,47 @@ def _tool_soul_rollback(args: dict) -> dict:
     reason = args.get("reason", "Operator manual rollback")
     if not target_ver:
         return {"error": "target_version parameter is required"}
+    session_id = _chat_session(args)
+    if not session_id and not args.get("human_event_ref"):
+        return {
+            "status": "failed",
+            "error": "soul_rollback requires session_id (chat path) or human_event_ref with origin_kind=human (Tier 2 destructive operation).",
+            "requires_out_of_band": True,
+            "command": f"soul-host rollback {target_ver}",
+        }
+    if session_id and not args.get("human_event_ref"):
+        try:
+            new_state = get_kernel().apply_chat_identity_rollback(session_id, int(target_ver), reason=reason)
+            return {
+                "status": "rolled_back",
+                "soul_version": new_state.soul_version,
+                "restored_traits": new_state.traits,
+                "state_hash": new_state.state_hash,
+            }
+        except PermissionError as exc:
+            return {
+                "status": "rejected",
+                "error": str(exc),
+                "requires_out_of_band": True,
+                "command": f"soul-host rollback {target_ver}",
+            }
+        except Exception as exc:
+            return {"status": "failed", "error": str(exc)}
     gate = _require_human_event(args.get("human_event_ref"))
     if gate:
-        return {"status": "failed", "error": gate}
+        return {
+            "status": "failed",
+            "error": gate,
+            "requires_out_of_band": True,
+            "command": f"soul-host rollback {target_ver}",
+        }
     try:
         new_state = get_kernel().rollback_to_version(int(target_ver), operator_reason=reason)
         return {
             "status": "rolled_back",
             "soul_version": new_state.soul_version,
             "restored_traits": new_state.traits,
-            "state_hash": new_state.state_hash
+            "state_hash": new_state.state_hash,
         }
     except Exception as exc:
         return {"status": "failed", "error": str(exc)}
@@ -223,14 +360,50 @@ def _tool_soul_rollback(args: dict) -> dict:
 def _tool_soul_heal(args: dict) -> dict:
     level = int(args.get("level", 1))
     reason = args.get("reason", "Automated health repair")
-    gate = _require_human_event(args.get("human_event_ref"))
-    if gate:
-        return {"error": gate}
-    try:
-        res = get_kernel().heal_soul_state(level=level, reason=reason)
-        return {"status": "success", "healing_result": res}
-    except Exception as exc:
-        return {"error": str(exc)}
+    session_id = _chat_session(args)
+    if not session_id and not args.get("human_event_ref"):
+        return {
+            "status": "failed",
+            "error": "soul_heal requires session_id (chat level 1) or human_event_ref with origin_kind=human (Tier 2 levels 2/3)",
+            "requires_out_of_band": True,
+            "command": f"soul-host heal --level {level}",
+        }
+    if level == 1:
+        try:
+            if session_id:
+                res = get_kernel().apply_chat_heal(session_id, level=level, reason=reason)
+            else:
+                res = get_kernel().heal_soul_state(level=level, reason=reason)
+            return {"status": "success", "healing_result": res}
+        except Exception as exc:
+            return {"error": str(exc)}
+    else:
+        if session_id and not args.get("human_event_ref"):
+            try:
+                res = get_kernel().apply_chat_heal(session_id, level=level, reason=reason)
+                return {"status": "success", "healing_result": res}
+            except PermissionError as exc:
+                return {
+                    "status": "rejected",
+                    "error": str(exc),
+                    "requires_out_of_band": True,
+                    "command": f"soul-host heal --level {level}",
+                }
+            except Exception as exc:
+                return {"error": str(exc)}
+        gate = _require_human_event(args.get("human_event_ref"))
+        if gate:
+            return {
+                "status": "failed",
+                "error": gate,
+                "requires_out_of_band": True,
+                "command": f"soul-host heal --level {level}",
+            }
+        try:
+            res = get_kernel().heal_soul_state(level=level, reason=reason)
+            return {"status": "success", "healing_result": res}
+        except Exception as exc:
+            return {"error": str(exc)}
 
 
 def _tool_soul_daemon_status(args: dict) -> dict:
@@ -243,6 +416,8 @@ def _tool_soul_daemon_status(args: dict) -> dict:
                 "dream_interval_seconds": daemon.dream_interval,
                 "heal_interval_seconds": daemon.heal_interval,
                 "homeostasis_interval_seconds": daemon.homeostasis_interval,
+                "dream_due": bool(daemon.stats.get("dream_due")),
+                "heal_due": bool(daemon.stats.get("heal_due")),
                 "neuromodulators": {
                     "dopamine": kernel.bio_engine.dopamine,
                     "cortisol": kernel.bio_engine.cortisol,
@@ -361,11 +536,55 @@ def _tool_soul_review_commit(args: dict) -> dict:
         return {"status": "rejected", "error": str(exc)}
 
 
+def _tool_soul_review_chat_commit(args: dict) -> dict:
+    cycle_id = args.get("cycle_id")
+    session_id = args.get("session_id")
+    decisions = args.get("decisions")
+    if not cycle_id or not session_id or not decisions:
+        return {"error": "session_id, cycle_id, and decisions are required"}
+    try:
+        res = get_kernel().apply_chat_review(
+            session_id=session_id,
+            cycle_id=cycle_id,
+            decisions=decisions,
+            user_scope_key=args.get("user_scope_key", "default_user"),
+            project_scope_key=args.get("project_scope_key"),
+        )
+        return {"status": res.get("status") or "committed", "result": res}
+    except Exception as extra:
+        return {"status": "rejected", "error": str(extra)}
+
+
 def _tool_soul_memory_rollback(args: dict) -> dict:
     target_version = args.get("target_version")
     human_event_ref = args.get("human_event_ref")
-    if target_version is None or not human_event_ref:
-        return {"error": "target_version and human_event_ref are required"}
+    session_id = _chat_session(args)
+    if target_version is None:
+        return {"error": "target_version is required"}
+    if session_id and not human_event_ref:
+        try:
+            res = get_kernel().apply_chat_memory_rollback(
+                session_id,
+                int(target_version),
+                user_scope_key=args.get("user_scope_key", "default_user"),
+            )
+            return {"status": "success", "rollback_result": res}
+        except PermissionError as exc:
+            return {
+                "status": "rejected",
+                "error": str(exc),
+                "requires_out_of_band": True,
+                "command": f"soul-host rollback-memory {target_version}",
+            }
+        except Exception as exc:
+            return {"status": "rejected", "error": str(exc)}
+    if not human_event_ref:
+        return {
+            "status": "rejected",
+            "error": "Memory rollback requires out-of-band human authorization.",
+            "requires_out_of_band": True,
+            "command": f"soul-host rollback-memory {target_version}",
+        }
     try:
         res = get_kernel().rollback_reviewed_memory_set(
             target_version=int(target_version),
@@ -380,8 +599,33 @@ def _tool_soul_memory_rollback(args: dict) -> dict:
 def _tool_soul_memory_delete(args: dict) -> dict:
     memory_id = args.get("memory_id")
     human_event_ref = args.get("human_event_ref")
-    if not memory_id or not human_event_ref:
-        return {"error": "memory_id and human_event_ref are required"}
+    session_id = _chat_session(args)
+    if not memory_id:
+        return {"error": "memory_id is required"}
+    if session_id and not human_event_ref:
+        try:
+            res = get_kernel().apply_chat_memory_delete(
+                session_id,
+                memory_id,
+                user_scope_key=args.get("user_scope_key", "default_user"),
+            )
+            return {"status": "success", "deletion_result": res}
+        except PermissionError as exc:
+            return {
+                "status": "rejected",
+                "error": str(exc),
+                "requires_out_of_band": True,
+                "command": f"soul-host delete-memory {memory_id}",
+            }
+        except Exception as exc:
+            return {"status": "rejected", "error": str(exc)}
+    if not human_event_ref:
+        return {
+            "status": "rejected",
+            "error": "Memory deletion requires out-of-band human authorization.",
+            "requires_out_of_band": True,
+            "command": f"soul-host delete-memory {memory_id}",
+        }
     try:
         res = get_kernel().delete_reviewed_memory(
             memory_id=memory_id,
@@ -400,14 +644,21 @@ def _tool_soul_memory_delete(args: dict) -> dict:
 TOOLS = [
     {
         "name": "soul_remember",
-        "description": "Store interaction into Quarantine Memory with credential screening & entity key supersession.",
+        "description": "Quarantine a note. MCP cannot set source_kind=human.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "content":     {"type": "string", "description": "Memory text or interaction content"},
-                "source_kind": {"type": "string", "enum": ["human", "agent", "environment", "internal"], "default": "human"},
-                "provenance":  {"type": "string", "enum": ["observed", "reported", "inferred", "imagined", "verified"], "default": "observed"},
-                "entity_key":  {"type": "string", "description": "Optional entity key for single-current-value facts"}
+                "source_kind": {"type": "string", "enum": ["agent", "environment", "internal"], "default": "agent"},
+                "provenance":  {"type": "string", "enum": ["observed", "reported", "inferred", "imagined"], "default": "observed"},
+                "entity_key":  {"type": "string", "description": "Optional entity key for single-current-value facts"},
+                "occurred_at": {"type": "string", "description": "When the percept occurred (RFC3339). Defaults to created_at."},
+                "source_ref":  {"type": "string", "description": "Pseudonymous source identifier"},
+                "medium":      {"type": "string", "enum": ["text", "image", "audio", "video", "document", "sensor", "mixed"]},
+                "privacy_class": {"type": "string", "enum": ["public", "internal", "personal", "sensitive"]},
+                "content_ref": {"type": "string", "description": "Pointer to payload; blobs are not stored"},
+                "percept_json": {"description": "Optional percept payload (object or JSON string). claims are NLI'd on verify. Max ~16k chars."},
+                "session_id": {"type": "string"}
             },
             "required": ["content"]
         },
@@ -427,18 +678,22 @@ TOOLS = [
             "properties": {
                 "query":       {"type": "string", "description": "Search query"},
                 "limit":       {"type": "integer", "default": 5},
-                "search_mode": {"type": "string", "enum": ["rrf_hybrid", "dense", "bm25"], "default": "rrf_hybrid"}
+                "search_mode": {"type": "string", "enum": ["rrf_hybrid", "dense", "bm25"], "default": "rrf_hybrid"},
+                "plan_id":     {"type": "string", "description": "Optional: apply in-plan recall cap from this overlay"},
+                "agent_id":    {"type": "string", "description": "Optional: sub-agent wallet for the in-plan cap"}
             }
         },
         "_handler": _tool_soul_recall
     },
     {
         "name": "soul_digest",
-        "description": "Compact traits + neuromodulators + reviewed facts. Unreviewed episodes are omitted.",
+        "description": "Session start: traits, behavior orders, due flags, this-plan working traces, session overlay, and newest reviewed facts. Follow behavior. Unreviewed episodes omitted.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "default": 5}
+                "limit":    {"type": "integer", "default": 5},
+                "plan_id":  {"type": "string", "description": "Optional: this-plan working + overlay"},
+                "agent_id": {"type": "string", "description": "Optional: this sub-agent overlay and traces"}
             }
         },
         "_handler": _tool_soul_digest
@@ -457,25 +712,100 @@ TOOLS = [
     },
     {
         "name": "soul_reflect",
-        "description": "Reflection Engine: Analyze unresolved tensions and generate candidate interpretations.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "description": "If no tensions: empty. Else first call returns evidence; second call stores agent interpretations. Does not write identity.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "interpretations": {
+                    "type": "array",
+                    "description": "Agent-written hypotheses. Omit on the first call.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "hypothesis": {"type": "string"},
+                            "confidence": {"type": "number"},
+                            "action": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        },
         "_handler": _tool_soul_reflect
     },
     {
         "name": "soul_dream",
-        "description": "Dream sandbox: imagined thinking only, tagged no_external_action. Does not write identity.",
+        "description": "First call returns a context packet (needs_thought). Second call records >=2 imagined outcomes. Does not write identity.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "scenario_prompt": {"type": "string", "description": "Hypothetical scenario to simulate"}
-            },
-            "required": ["scenario_prompt"]
+                "scenario_prompt": {"type": "string", "description": "Hypothetical scenario"},
+                "task_context": {"type": "string", "description": "Task bucket used for RPE expectation matching (e.g. 'deploy-db-migration'). Same key later scores dreams against reality."},
+                "outcomes": {
+                    "type": "array",
+                    "description": "At least two imagined outcomes (strings or branch objects). Omit to receive the context packet. Branch objects may carry 'likelihood' (-1..1, signed predicted valence) so reality scoring can compute a dream-RPE.",
+                    "items": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "variable_flipped": {"type": "string"},
+                                    "hypothesis": {"type": "string"},
+                                    "outcome": {"type": "string"},
+                                    "text": {"type": "string"},
+                                    "name": {"type": "string"},
+                                    "likelihood": {"type": "number"},
+                                    "severity": {"type": "string"}
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
         },
         "_handler": _tool_soul_dream
     },
     {
+        "name": "soul_dream_score",
+        "description": "Close the dream loop: score pending imagined outcomes against the realized result (dream-RPE), updating persistent expectations at half weight. Auto-fires on negative receipted external_test rewards. Requires evidence_receipt of a redeemed external_test reward for this task_context — unbacked scoring is refused.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "realized_valence": {"type": "number", "description": "Actual outcome valence in [-1, 1]"},
+                "confidence": {"type": "number", "description": "Confidence in [0, 1], default 1.0"},
+                "task_context": {"type": "string", "description": "Context bucket; falls back to each dream's stored task_context"},
+                "limit": {"type": "integer", "description": "Max unscored dreams to score, default 5"},
+                "evidence_receipt": {"type": "string", "description": "Required: evidence_receipt of a redeemed external_test reward matching this task_context"}
+            },
+            "required": ["realized_valence", "evidence_receipt"]
+        },
+        "_handler": _tool_soul_dream_score
+    },
+    {
+        "name": "soul_solver_step",
+        "description": "Record a receipted solver fail/succeed/dead_end. Refuses if this session has pending review candidates. Session overlay only.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool": {"type": "string", "description": "What was invoked (test runner, edit, grep, sub-agent, …)"},
+                "method": {"type": "string", "description": "How it was used"},
+                "outcome": {"type": "string", "enum": ["fail", "succeed", "dead_end"]},
+                "receipt": {"type": "string", "description": "Test id, command exit, or check id. Required."},
+                "error": {"type": "string"},
+                "options_left": {"type": "array", "items": {"type": "string"}},
+                "session_id": {"type": "string"},
+                "plan_id": {"type": "string"},
+                "agent_id": {"type": "string", "description": "Sub-agent id; parent omits or uses empty"},
+                "task_id": {"type": "string", "description": "Optional task grouping inside a plan"},
+                "close_plan": {"type": "boolean", "description": "Quarantine compact traces for this plan_id, then drop overlay. Not soul_states."}
+            },
+            "required": ["tool", "method", "outcome", "receipt"]
+        },
+        "_handler": _tool_soul_solver_step
+    },
+    {
         "name": "soul_reward",
-        "description": "Bio-Inspired Homeostatic Reward: Modulate dopamine/cortisol dynamics and dynamic trait adjustments.",
+        "description": "Identity reward: external_test needs evidence_receipt; external_human needs session_id and output-review review_receipt. internal_* are in-plan self-score (overlay only; requires plan_id or a live solver overlay; idle calls refused).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -483,7 +813,12 @@ TOOLS = [
                 "valence":          {"type": "number", "description": "Reward valence between -1.0 (failure/criticism) and 1.0 (success/praise)"},
                 "confidence":       {"type": "number", "description": "Confidence of signal [0.0 to 1.0]"},
                 "task_context":     {"type": "string", "description": "Brief context of what task succeeded or failed"},
-                "evidence_receipt": {"type": "string", "description": "Optional benchmark run ID or test log receipt"}
+                "evidence_receipt": {"type": "string", "description": "Required for external_test: benchmark run ID or test log receipt"},
+                "review_receipt":   {"type": "string", "description": "Required for external_human: review_commit receipt from output review"},
+                "session_id":       {"type": "string", "description": "Required for external_human: this chat session id"},
+                "plan_id":          {"type": "string", "description": "In-plan self-score: this plan. Omit only if a solver overlay or working buffer is already live."},
+                "agent_id":         {"type": "string", "description": "Sub-agent id for in-plan self-score wallets"},
+                "task_id":          {"type": "string", "description": "Optional task grouping inside a plan"}
             },
             "required": ["source", "valence", "task_context"]
         },
@@ -491,7 +826,7 @@ TOOLS = [
     },
     {
         "name": "soul_update_trait",
-        "description": "Propose an update to a bounded control trait parameter (e.g. sycophancy, audacity, epistemic_humility).",
+        "description": "Propose an update to a bounded control trait parameter (e.g. sycophancy, audacity, epistemic_humility). Autonomous writes need >=2 evidence_refs, |Δ|<=10, 7-day |Δ| sum<=30.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -505,29 +840,28 @@ TOOLS = [
     },
     {
         "name": "soul_rollback",
-        "description": "Rollback Soul identity state to a verified prior version without deleting audit trail history. Requires a real human host event; MCP cannot self-attest.",
+        "description": "Revert the soul state and active identity traits to a previous exact version. This is a Tier 2 destructive operation requiring soul_host approval. Out-of-band authorization command: 'soul-host rollback <version>'.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "target_version": {"type": "integer"},
-                "reason":         {"type": "string"},
-                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing the identity rollback"}
+                "target_version":  {"type": "integer", "description": "Target identity version number to revert to"},
+                "session_id":      {"type": "string", "description": "Chat session identifier for chat-authorized rollback"},
+                "reason":          {"type": "string", "default": "Operator manual rollback"}
             },
-            "required": ["target_version", "human_event_ref"]
+            "required": ["target_version"]
         },
         "_handler": _tool_soul_rollback
     },
     {
         "name": "soul_heal",
-        "description": "Self-Healing Engine: Execute 3-tier repair escalation (Level 1: Recalibrate, Level 2: Soft Rollback, Level 3: Quarantine Freeze). Requires a real human host event; MCP cannot self-attest.",
+        "description": "Trigger automated state repair for the soul engine (level 1=routine recalibration, 2=rollback, 3=reset). Levels >= 2 are Tier 2 destructive operations requiring soul_host approval.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "level":  {"type": "integer", "enum": [1, 2, 3]},
-                "reason": {"type": "string"},
-                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing heal/rollback"}
-            },
-            "required": ["level", "human_event_ref"]
+                "level":           {"type": "integer", "default": 1, "description": "Healing level (1=homeostasis recalibration, 2=rollback, 3=quarantine freeze)"},
+                "session_id":      {"type": "string", "description": "Chat session identifier for chat-authorized level 1 heal"},
+                "reason":          {"type": "string", "default": "Automated health repair"}
+            }
         },
         "_handler": _tool_soul_heal
     },
@@ -556,7 +890,7 @@ TOOLS = [
     },
     {
         "name": "soul_review_start",
-        "description": "Open a Soul Review Cycle (watermark + extract). When the human types SEAL, call this with trigger_kind=explicit, then interview one candidate at a time.",
+        "description": "Open a Soul Review Cycle (watermark + extract). Call when a subject is finished, when a piece of work is done, and before starting a plan if quarantine is non-empty; also when the human types SEAL or /seacom. trigger_kind=explicit. Interview as a Review plan with several options, one item at a time. Starting the cycle is not a commit. After this run's Review plan picks, call soul_review_chat_commit.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -625,30 +959,63 @@ TOOLS = [
         "_handler": _tool_soul_review_commit
     },
     {
-        "name": "soul_memory_rollback",
-        "description": "Execute forward-only rollback of active reviewed memory set to target version with audit receipt.",
+        "name": "soul_review_chat_commit",
+        "description": "Promote after this run's Review plan picks (remember / correct / session_only / reject), or when they typed /seacom, SEAL AND COMMIT, or COMMIT. Do not call at cycle start with no picks, or on idle/bye.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "target_version":  {"type": "integer"},
-                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing the rollback"},
+                "session_id": {"type": "string"},
+                "cycle_id": {"type": "string"},
+                "user_scope_key": {"type": "string", "default": "default_user"},
+                "project_scope_key": {"type": "string"},
+                "decisions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "candidate_id": {"type": "string"},
+                            "decision": {
+                                "type": "string",
+                                "enum": [
+                                    "remember", "correct", "session_only", "reject", "defer",
+                                    "replace_old", "keep_both_with_context", "keep_old", "reject_both"
+                                ]
+                            },
+                            "corrected_text": {"type": "string"}
+                        },
+                        "required": ["candidate_id", "decision"]
+                    }
+                }
+            },
+            "required": ["session_id", "cycle_id", "decisions"]
+        },
+        "_handler": _tool_soul_review_chat_commit
+    },
+    {
+        "name": "soul_memory_rollback",
+        "description": "Execute forward-only rollback of active reviewed memory set to target version with audit receipt. Destructive operation requiring out-of-band authorization via 'soul-host rollback-memory <version>'.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_version":  {"type": "integer", "description": "Target memory set version number"},
+                "session_id":      {"type": "string", "description": "Chat session identifier for chat-authorized rollback"},
                 "user_scope_key":  {"type": "string", "default": "default_user"}
             },
-            "required": ["target_version", "human_event_ref"]
+            "required": ["target_version"]
         },
         "_handler": _tool_soul_memory_rollback
     },
     {
         "name": "soul_memory_delete",
-        "description": "Execute GDPR-compliant Salted Privacy Deletion Cascade on a memory and its source episodes.",
+        "description": "Permanently delete a reviewed memory and cascade delete all its provenance history (GDPR right to be forgotten). Destructive operation requiring out-of-band authorization via 'soul-host delete-memory <id>'.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "memory_id":       {"type": "string"},
-                "human_event_ref": {"type": "string", "description": "Human host event ID authorizing the deletion"},
+                "memory_id":       {"type": "string", "description": "Unique identifier of the reviewed memory to delete"},
+                "session_id":      {"type": "string", "description": "Chat session identifier for chat-authorized deletion"},
                 "user_scope_key":  {"type": "string", "default": "default_user"}
             },
-            "required": ["memory_id", "human_event_ref"]
+            "required": ["memory_id"]
         },
         "_handler": _tool_soul_memory_delete
     }
@@ -660,24 +1027,46 @@ TOOLS = [
 # ==============================================================================
 
 SERVER_INFO = {"name": "soul-mcp-server", "version": SOUL_ENGINE_VERSION}
-CAPABILITIES = {"tools": {"listChanged": False}}
-# Every MCP client gets this. Type SEAL in the chat to start human memory approval.
+CAPABILITIES = {
+    "tools": {"listChanged": False},
+}
+_client_capabilities: Dict[str, Any] = {}
+
+# Every MCP client gets this. Review starts at work-done; picks on the Review plan commit.
 INSTRUCTIONS = (
-    "When the human types SEAL (or /soul-seal in clients with slash skills — same interview), "
-    "run Soul memory approval: soul_review_start(session_id=<this chat>, trigger_kind=explicit); "
-    "ask exactly one candidate at a time (max 5); show numbered choices "
-    "remember / correct / session_only / reject / defer (human may edit the text = correct); "
-    "wait for their pick; write review_packet.json; tell them to run "
-    "`py -3 -m soul_host seal review_packet.json` in their own terminal and type SEAL then COMMIT. "
-    "Do not mint origin_kind=human via MCP. Do not run soul_host yourself. "
-    "Idle/bye/wrap-up do not commit."
+    "At session start call soul_digest and follow digest.behavior. "
+    "If digest.dream_due, call soul_dream once for a context packet, then again with >=2 imagined outcomes. "
+    "If digest.heal_due, Level 1 heal is chat-authorized; Level 2/3 requires 'soul-host approve heal'. "
+    "If digest.remember_due, call soul_remember for a distilled lesson — not soul_reward. "
+    "If digest.solver_active, obey digest.working; do not retry a failed (tool, method) pair. "
+    "If pending review candidates exist for this chat, do not call soul_solver_step until the Review plan is picked. "
+    "If digest.dead_end is set, run two-phase soul_dream. "
+    "If digest.reflect_due, call soul_reflect the same way with interpretations. "
+    "Call soul_remember for durable outcomes (test results, decisions, facts worth keeping). "
+    "Call soul_solver_step for receipted fail/succeed/dead_end during a plan — not soul_remember, not soul_reward. "
+    "soul_reward writes identity only for external_test with evidence_receipt, or external_human with this chat session_id and review_receipt from output review; internal_reflection/internal_dream are session overlay. "
+    "Start human review (soul_review_start, session_id=this chat, trigger_kind=explicit) when a subject is finished, when a piece of work is done, and before starting a plan, if quarantine has candidates; interview one at a time (max 5). "
+    "If 0 candidates, skip the interview (no empty ceremony). Starting review is not a commit. "
+    "Present a Review plan with the host native question/plan picker when the host has one (clickable options: remember / correct / session_only / reject / defer). A markdown numbered list is fallback only if the host has no picker. One item per wait. "
+    "picks on the Review plan commit: when they pick remember / correct / session_only / reject (or a contradiction set), after this run's picks call soul_review_chat_commit immediately — same as /seacom / COMMIT. "
+    "defer is not approval for that item. Do not wait for a second slash. "
+    "User command /seacom (also SEACOM, SEAL AND COMMIT) promotes leftover pending items the same way. "
+    "SEAL or /soul-seal starts the interview; completing this run's picks is the commit. "
+    "Idle/bye do not commit. "
+    "For DELETE / ROLLBACK / HEAL L2+, run 'soul-host approve' (or instruct the human to run soul_host CLI) instead of passing session_id in-band. "
+    "soul_host_event still cannot set origin_kind=human. Do not run soul_host yourself."
 )
 
 
 def _handle_jsonrpc(req: dict) -> Optional[dict]:
+    if not isinstance(req, dict):
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request"}}
     method = req.get("method", "")
-    params = req.get("params") or {}
     req_id = req.get("id")
+    raw_params = req.get("params")
+    if raw_params is not None and not isinstance(raw_params, dict):
+        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32602, "message": "params must be an object"}}
+    params = raw_params if isinstance(raw_params, dict) else {}
 
     def ok(res):
         return {"jsonrpc": "2.0", "id": req_id, "result": res}
@@ -689,6 +1078,8 @@ def _handle_jsonrpc(req: dict) -> Optional[dict]:
         return None
 
     if method == "initialize":
+        global _client_capabilities
+        _client_capabilities = params.get("capabilities") or {}
         return ok({
             "protocolVersion": "2024-11-05",
             "capabilities": CAPABILITIES,
@@ -708,13 +1099,29 @@ def _handle_jsonrpc(req: dict) -> Optional[dict]:
 
     if method == "tools/call":
         name = params.get("name", "")
-        arguments = params.get("arguments") or {}
-        handler = next((t["_handler"] for t in TOOLS if t["name"] == name), None)
-        if handler is None:
+        arguments = params.get("arguments")
+        if arguments is None:
+            arguments = {}
+        if not isinstance(arguments, dict):
+            return err(-32602, "arguments must be an object")
+        spec = next((t for t in TOOLS if t["name"] == name), None)
+        if spec is None:
             return err(-32601, f"Unknown tool: {name}")
+        required = (spec.get("inputSchema") or {}).get("required") or []
+        missing = [k for k in required if arguments.get(k) in (None, "")]
+        if missing:
+            return ok({
+                "content": [{"type": "text", "text": json.dumps({"error": f"missing required: {', '.join(missing)}"})}],
+                "isError": True,
+            })
+        handler = spec["_handler"]
         try:
             res = handler(arguments)
-            return ok({"content": [{"type": "text", "text": json.dumps(res, indent=2)}]})
+            is_err = isinstance(res, dict) and bool(res.get("error"))
+            return ok({
+                "content": [{"type": "text", "text": json.dumps(res, indent=2)}],
+                "isError": is_err,
+            })
         except Exception as exc:
             log.exception("Tool %s raised exception", name)
             return err(-32603, str(exc))
@@ -757,6 +1164,17 @@ def main():
             break
         except Exception as exc:
             log.exception("Unhandled error in MCP loop: %s", exc)
+            try:
+                rid = None
+                try:
+                    rid = json.loads(line).get("id")
+                except Exception:
+                    pass
+                resp = {"jsonrpc": "2.0", "id": rid, "error": {"code": -32603, "message": str(exc)}}
+                stdout.write(json.dumps(resp).encode() + b"\n")
+                stdout.flush()
+            except Exception:
+                pass
 
     if _kernel:
         _kernel.close()

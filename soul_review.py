@@ -1,5 +1,5 @@
 """
-Soul Review Cycle Engine v1.1.1
+Soul Review Cycle Engine v1.2.0
 Normative Source: docs/REVIEW_CYCLE_SPECIFICATION.md & docs/CONSTITUTION.md
 
 This module implements:
@@ -65,6 +65,10 @@ CandidateDecision = Literal[
     "remember", "correct", "session_only", "reject", "defer",
     "replace_old", "keep_both_with_context", "keep_old", "reject_both"
 ]
+ALLOWED_DECISIONS = {
+    "remember", "correct", "session_only", "reject", "defer",
+    "replace_old", "keep_both_with_context", "keep_old", "reject_both",
+}
 
 ContradictionDecision = Literal[
     "replace_old", "keep_both_with_context", "keep_old", "reject_both", "defer"
@@ -351,6 +355,32 @@ def compute_audit_hash(
     })
 
 
+def compute_human_event_hmac(
+    admin_key: str,
+    event_id: str,
+    session_id: str,
+    user_scope_key: str,
+    project_scope_key: Optional[str],
+    event_kind: str,
+    payload_hash: Optional[str],
+    occurred_at: str,
+) -> str:
+    """Compute HMAC signature binding all immutable fields of a human event (BUG-AUTH-003)."""
+    import hmac
+    msg_dict = {
+        "event_id": str(event_id),
+        "event_kind": str(event_kind),
+        "occurred_at": str(occurred_at),
+        "payload_hash": str(payload_hash or ""),
+        "project_scope_key": str(project_scope_key or ""),
+        "session_id": str(session_id),
+        "user_scope_key": str(user_scope_key),
+    }
+    raw = canonical_json(msg_dict)
+    key_bytes = admin_key.encode("utf-8") if isinstance(admin_key, str) else admin_key
+    return hmac.new(key_bytes, raw, hashlib.sha256).hexdigest()
+
+
 # ------------------------------------------------------------------------------
 # DOMAIN DATA STRUCTURES
 # ------------------------------------------------------------------------------
@@ -371,6 +401,7 @@ class HostEvent:
     occurred_at: str
     consumed_at: Optional[str] = None
     payload_redacted_at: Optional[str] = None
+    auth_sig: Optional[str] = None
 
 
 @dataclass
@@ -470,7 +501,8 @@ SECRET_PATTERNS = [
     re.compile(r"ghp_[a-zA-Z0-9]{36}"),                              # GitHub PAT
     re.compile(r"-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----"),        # PEM Key
     re.compile(r"eyJ[a-zA-Z0-9_\-]{10,}\.eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{3,}"), # JWT
-    re.compile(r"(password|passwd|secret|api_key|access_token)\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE)
+    re.compile(r"(password|passwd|secret|api_key|access_token)\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
+    re.compile(r"(password|passwd|api_key|access_token)\s*[:=]\s*\S+", re.IGNORECASE),
 ]
 
 TRANSIENT_PATTERNS = [
@@ -603,10 +635,12 @@ class SoulReviewEngine:
         project_scope_key: Optional[str] = None,
         origin_kind: OriginKind = "human",
         event_kind: EventKind = "conversation",
-        payload: Any = None
+        payload: Any = None,
+        auth_sig: Optional[str] = None,
     ) -> HostEvent:
         """Record an immutable host interaction event and update the hash chain."""
         with self._get_lock(), self._get_conn() as conn:
+            conn.execute("BEGIN IMMEDIATE;")
             cur = conn.cursor()
             cur.execute("""
             SELECT sequence, event_hash FROM host_events
@@ -635,16 +669,32 @@ class SoulReviewEngine:
                 occurred_at=occurred_at
             )
 
+            if auth_sig is None and origin_kind == "human":
+                adm = None
+                if hasattr(self.kernel_or_conn_fn, "_get_admin_key"):
+                    adm = self.kernel_or_conn_fn._get_admin_key()
+                if adm:
+                    auth_sig = compute_human_event_hmac(
+                        admin_key=adm,
+                        event_id=event_id,
+                        session_id=session_id,
+                        user_scope_key=user_scope_key,
+                        project_scope_key=project_scope_key,
+                        event_kind=event_kind,
+                        payload_hash=payload_hash,
+                        occurred_at=occurred_at,
+                    )
+
             cur.execute("""
             INSERT INTO host_events (
                 id, session_id, user_scope_key, project_scope_key, sequence,
                 origin_kind, event_kind, payload_hash, payload_hash_salt,
-                previous_event_hash, event_hash, occurred_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                previous_event_hash, event_hash, occurred_at, auth_sig
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
                 event_id, session_id, user_scope_key, project_scope_key, seq,
                 origin_kind, event_kind, payload_hash, salt,
-                prev_hash, event_hash, occurred_at
+                prev_hash, event_hash, occurred_at, auth_sig
             ))
             conn.commit()
 
@@ -660,7 +710,8 @@ class SoulReviewEngine:
             payload_hash_salt=salt,
             previous_event_hash=prev_hash,
             event_hash=event_hash,
-            occurred_at=occurred_at
+            occurred_at=occurred_at,
+            auth_sig=auth_sig,
         )
 
     def open_or_get_cycle(
@@ -673,6 +724,8 @@ class SoulReviewEngine:
         idempotency_key: Optional[str] = None
     ) -> ReviewCycle:
         """Open a review cycle anchored at the current host watermark."""
+        if not (session_id or "").strip():
+            raise ValueError("session_id is required to open a review cycle")
         with self._get_lock(), self._get_conn() as conn:
             cur = conn.cursor()
             if idempotency_key:
@@ -699,11 +752,16 @@ class SoulReviewEngine:
                    invalidated_at, preview_json, preview_hash, preview_hash_salt,
                    preview_created_at, preview_redacted_at
             FROM review_cycles
-            WHERE session_id = ? AND status IN ('active', 'preparing', 'review_ready', 'reviewing', 'idle_pending')
+            WHERE session_id = ? AND status IN ('active', 'preparing', 'review_ready', 'reviewing', 'idle_pending', 'pending_commit', 'recovery_required')
             ORDER BY opened_at DESC LIMIT 1;
             """, (session_id,))
             row = cur.fetchone()
             if row:
+                if row[4] == "recovery_required":
+                    cur.execute("UPDATE review_cycles SET status = 'active' WHERE id = ?;", (row[0],))
+                    row = list(row)
+                    row[4] = "active"
+                    return ReviewCycle(*row)
                 return ReviewCycle(*row)
 
             # Ensure host event exists for watermark
@@ -802,6 +860,26 @@ class SoulReviewEngine:
         if not cycle:
             raise ValueError(f"Review cycle {cycle_id} not found")
 
+        active_mems: List[dict] = []
+        ek_to_mems: Dict[str, List[str]] = {}
+        kernel = self.kernel_or_conn_fn
+        nli = getattr(kernel, "nli_engine", None)
+        if hasattr(kernel, "list_active_reviewed_memories"):
+            active_mems = kernel.list_active_reviewed_memories(user_scope_key)
+        active_ids = {m.get("memory_id") for m in active_mems if m.get("memory_id")}
+        if hasattr(kernel, "_get_conn"):
+            with kernel._get_conn() as kconn:
+                for mid, ek in kconn.execute(
+                    """SELECT rm.id, e.entity_key
+                       FROM reviewed_memories rm
+                       JOIN json_each(rm.source_episode_refs_json) j
+                       JOIN episodes e ON e.id = j.value
+                       WHERE rm.retention_state = 'accessible' AND rm.deleted_at IS NULL
+                         AND e.entity_key IS NOT NULL;"""
+                ):
+                    if mid in active_ids:
+                        ek_to_mems.setdefault(ek, []).append(mid)
+
         with self._get_lock():
             existing = self.get_pending_candidates(cycle_id)
             if existing:
@@ -811,6 +889,14 @@ class SoulReviewEngine:
                     cycle_id,
                 )
                 return existing[:max_candidates]
+            if cycle.status == "pending_commit":
+                frozen = self._load_cycle_candidates(cycle_id, pending_only=False)
+                logging.info(
+                    "soul_review extract: reusing %s previewed candidates for cycle %s",
+                    len(frozen),
+                    cycle_id,
+                )
+                return frozen[:max_candidates]
 
             with self._get_conn() as conn:
                 cur = conn.cursor()
@@ -821,14 +907,21 @@ class SoulReviewEngine:
                 FROM episodes
                 WHERE review_cycle_id IS NULL
                   AND deleted_at IS NULL
-                  AND trust_state NOT IN ('superseded')
-                  AND (? IS NULL OR created_at <= ?)
+                  AND trust_state NOT IN ('superseded', 'expired')
+                  AND created_at <= ?
+                  AND (
+                    host_event_id IS NULL
+                    OR host_event_id IN (
+                      SELECT id FROM host_events
+                      WHERE session_id = ? AND sequence <= ?
+                    )
+                  )
                   AND id NOT IN (
                     SELECT value FROM memory_candidates, json_each(memory_candidates.source_episode_refs_json)
                     WHERE memory_candidates.cycle_id = ?
                   )
                 ORDER BY created_at ASC;
-                """, (freeze_at, freeze_at, cycle_id))
+                """, (freeze_at, cycle.session_id, cycle.watermark_sequence, cycle_id))
                 ep_rows = cur.fetchall()
 
                 extracted: List[MemoryCandidate] = []
@@ -843,6 +936,25 @@ class SoulReviewEngine:
                     elif "decid" in content.lower() or "architect" in content.lower() or "rule" in content.lower():
                         cand_type = "project_decision"
 
+                    contra_refs: List[str] = []
+                    supp_refs: List[str] = []
+                    for mem in active_mems:
+                        if mem.get("scope") == "session_only":
+                            continue
+                        mid = mem.get("memory_id")
+                        text = mem.get("canonical_text") or ""
+                        if not mid or not text or nli is None:
+                            continue
+                        ent, cscore = nli.predict(text, content)
+                        if cscore >= 0.60:
+                            contra_refs.append(mid)
+                        elif ent >= 0.60:
+                            supp_refs.append(mid)
+                    if entity_key:
+                        contra_refs.extend(ek_to_mems.get(entity_key, []))
+                    contra_refs = list(dict.fromkeys(contra_refs))
+                    supp_refs = [s for s in dict.fromkeys(supp_refs) if s not in contra_refs]
+
                     cand_id = f"mcand_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
                     salt = generate_salt()
                     cand_hash = compute_candidate_hash(
@@ -853,11 +965,11 @@ class SoulReviewEngine:
                         original_provenance=prov,
                         source_episode_refs=[ep_id],
                         source_host_event_refs=[cycle.watermark_event_id],
-                        supporting_refs=[],
-                        contradicting_refs=[],
+                        supporting_refs=supp_refs,
+                        contradicting_refs=contra_refs,
                         scope="project" if cand_type in ("project_fact", "project_decision") else "user",
                         sensitivity="internal",
-                        confidence=0.9 if trust_state == "verified" else 0.8,
+                        confidence=0.9 if trust_state == "corroborated" else 0.8,
                         revises_candidate_id=None,
                         created_from_human_event_ref=None
                     )
@@ -871,11 +983,11 @@ class SoulReviewEngine:
                         original_provenance=prov,
                         source_episode_refs=[ep_id],
                         source_host_event_refs=[cycle.watermark_event_id],
-                        supporting_refs=[],
-                        contradicting_refs=[],
+                        supporting_refs=supp_refs,
+                        contradicting_refs=contra_refs,
                         scope="project" if cand_type in ("project_fact", "project_decision") else "user",
                         sensitivity="internal",
-                        confidence=0.9 if trust_state == "verified" else 0.8,
+                        confidence=0.9 if trust_state == "corroborated" else 0.8,
                         status="pending",
                         candidate_hash=cand_hash,
                         created_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -919,19 +1031,22 @@ class SoulReviewEngine:
 
             return extracted
 
-    def get_pending_candidates(self, cycle_id: str) -> List[MemoryCandidate]:
+    def _load_cycle_candidates(self, cycle_id: str, pending_only: bool = True) -> List[MemoryCandidate]:
         with self._get_conn() as conn:
             cur = conn.cursor()
-            cur.execute("""
+            sql = """
             SELECT id, user_scope_key, cycle_id, candidate_type, canonical_text,
                    original_provenance, source_episode_refs_json, source_host_event_refs_json,
                    supporting_refs_json, contradicting_refs_json, scope, sensitivity,
                    confidence, status, candidate_hash, created_at, revises_candidate_id,
                    created_from_human_event_ref, candidate_hash_salt, payload_redacted_at
             FROM memory_candidates
-            WHERE cycle_id = ? AND status = 'pending'
-            ORDER BY created_at ASC;
-            """, (cycle_id,))
+            WHERE cycle_id = ?
+            """
+            if pending_only:
+                sql += " AND status IN ('pending', 'deferred')"
+            sql += " ORDER BY created_at ASC;"
+            cur.execute(sql, (cycle_id,))
             rows = cur.fetchall()
             candidates = []
             for r in rows:
@@ -959,6 +1074,9 @@ class SoulReviewEngine:
                 ))
             return rank_candidates(candidates)
 
+    def get_pending_candidates(self, cycle_id: str) -> List[MemoryCandidate]:
+        return self._load_cycle_candidates(cycle_id, pending_only=True)
+
     def record_human_decision(
         self,
         cycle_id: str,
@@ -973,7 +1091,7 @@ class SoulReviewEngine:
         Record a verified human decision on a candidate.
         Validates host event origin and sets candidate status.
         """
-        with self._get_conn() as conn:
+        with self._get_lock(), self._get_conn() as conn:
             cur = conn.cursor()
             # Verify human host event
             cur.execute("SELECT origin_kind, event_hash FROM host_events WHERE id = ?;", (human_event_ref,))
@@ -985,6 +1103,26 @@ class SoulReviewEngine:
 
             human_ev_hash = ev_row[1]
 
+            # Bind the human event to this cycle's session/user scope: a human
+            # event minted for another session must not authorize this cycle.
+            cur.execute("""
+            SELECT rc.user_scope_key, rc.session_id FROM review_cycles rc WHERE id = ?;
+            """, (cycle_id,))
+            cyc_row = cur.fetchone()
+            if not cyc_row:
+                raise ValueError(f"Review cycle {cycle_id} not found")
+            ev_owner = cur.execute(
+                "SELECT user_scope_key, session_id, payload_hash FROM host_events WHERE id = ?;",
+                (human_event_ref,),
+            ).fetchone()
+            if ev_owner and cyc_row[0] and ev_owner[0] and ev_owner[0] != cyc_row[0]:
+                raise PermissionError(
+                    "Decision rejected: human event belongs to a different user scope")
+            if (ev_owner and cyc_row[1] and ev_owner[1]
+                    and ev_owner[1] != cyc_row[1]):
+                raise PermissionError(
+                    "Decision rejected: human event belongs to a different session")
+
             # Fetch candidate
             cur.execute("""
             SELECT id, cycle_id, candidate_type, canonical_text, original_provenance,
@@ -995,8 +1133,42 @@ class SoulReviewEngine:
             c_row = cur.fetchone()
             if not c_row:
                 raise ValueError(f"Candidate {candidate_id} not found")
+            if c_row[1] != cycle_id:
+                raise ValueError("candidate_id does not belong to this review cycle")
+            if decision not in ALLOWED_DECISIONS:
+                raise ValueError(f"unknown decision {decision!r}")
 
             cand_hash = c_row[12]
+            cur.execute(
+                """
+                SELECT id, user_scope_key, cycle_id, candidate_id, decision,
+                       human_event_ref, decision_hash, idempotency_key, decided_at,
+                       result_candidate_id, correction_confirmation_event_ref
+                FROM review_decisions WHERE cycle_id = ? AND candidate_id = ?;
+                """,
+                (cycle_id, candidate_id),
+            )
+            existing_dec = cur.fetchone()
+            if existing_dec:
+                if existing_dec[4] == decision:
+                    return ReviewDecision(
+                        id=existing_dec[0],
+                        user_scope_key=existing_dec[1],
+                        cycle_id=existing_dec[2],
+                        candidate_id=existing_dec[3],
+                        decision=existing_dec[4],
+                        human_event_ref=existing_dec[5],
+                        decision_hash=existing_dec[6],
+                        idempotency_key=existing_dec[7],
+                        decided_at=existing_dec[8],
+                        result_candidate_id=existing_dec[9],
+                        correction_confirmation_event_ref=existing_dec[10],
+                    )
+                cur.execute("SELECT status FROM review_cycles WHERE id = ?;", (cycle_id,))
+                st = cur.fetchone()
+                if st and st[0] == "committed":
+                    raise ValueError("cannot change a decision on a committed cycle")
+                cur.execute("DELETE FROM review_decisions WHERE id = ?;", (existing_dec[0],))
             dec_id = f"rdec_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
             decided_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
             idem_key = f"idem_dec_{cycle_id}_{candidate_id}_{decision}"
@@ -1011,12 +1183,26 @@ class SoulReviewEngine:
                 if not correction_confirmation_event_ref:
                     raise ValueError("Exact-text confirmation host event required for correction")
 
-                # Verify confirmation event
-                cur.execute("SELECT origin_kind, event_hash FROM host_events WHERE id = ?;", (correction_confirmation_event_ref,))
+                # Verify confirmation event binds the exact corrected text
+                cur.execute(
+                    "SELECT origin_kind, event_hash, payload_hash, payload_hash_salt FROM host_events WHERE id = ?;",
+                    (correction_confirmation_event_ref,),
+                )
                 conf_row = cur.fetchone()
                 if not conf_row or conf_row[0] != "human":
                     raise PermissionError("Correction confirmation host event must have origin 'human'")
                 corr_confirm_hash = conf_row[1]
+                salt = conf_row[3] or ""
+                expected = sha256_digest({
+                    "salt": salt,
+                    "payload": json.dumps({"corrected_text": corrected_text}, sort_keys=True),
+                })
+                alt = sha256_digest({
+                    "salt": salt,
+                    "payload": json.dumps(corrected_text, sort_keys=True),
+                })
+                if conf_row[2] not in (expected, alt):
+                    raise ValueError("correction confirmation event payload does not match corrected_text")
 
                 # Create revised candidate
                 result_cand_id = f"mcand_rev_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
@@ -1089,7 +1275,7 @@ class SoulReviewEngine:
                 "reject_both": "rejected",
                 "defer": "deferred"
             }
-            cand_status = status_map.get(decision, "confirmed")
+            cand_status = status_map[decision]
             cur.execute("UPDATE memory_candidates SET status = ? WHERE id = ?;", (cand_status, candidate_id))
 
             conn.commit()
@@ -1108,6 +1294,91 @@ class SoulReviewEngine:
             correction_confirmation_event_ref=correction_confirmation_event_ref
         )
 
+    def _preview_buckets(self, rows) -> dict:
+        additions, corrections, supersessions, session_only, rejected, deferred, routed_proposals = [], [], [], [], [], [], []
+        for r in rows:
+            dec_id, dec, cand_id, res_cand_id, ctype, text, prov, scope, eps_json, conf, rtext, rtype = r[:12]
+            item = {"id": cand_id, "decision_id": dec_id, "canonical_text": text, "scope": scope, "type": ctype}
+            if dec == "remember":
+                (session_only if scope == "session_only" else additions).append(item)
+            elif dec == "session_only":
+                session_only.append(item)
+            elif dec == "keep_both_with_context":
+                additions.append(item)
+            elif dec == "keep_old":
+                rejected.append(item)
+            elif dec == "correct":
+                corrections.append({
+                    "id": cand_id, "revised_id": res_cand_id, "original_text": text,
+                    "revised_text": rtext, "scope": scope,
+                })
+            elif dec == "replace_old":
+                supersessions.append(item)
+            elif dec in ("reject", "reject_both"):
+                rejected.append(item)
+            elif dec == "defer":
+                deferred.append(item)
+        return {
+            "additions": additions, "corrections": corrections, "supersessions": supersessions,
+            "session_only": session_only, "rejected": rejected, "deferred": deferred,
+            "routed_proposals": routed_proposals,
+        }
+
+    def _cycle_preview_hash(self, cycle: ReviewCycle, salt: str, buckets: dict) -> str:
+        return compute_preview_hash(
+            salt=salt,
+            cycle_id=cycle.id,
+            user_scope_key=cycle.user_scope_key,
+            project_scope_key=cycle.project_scope_key,
+            watermark_event_id=cycle.watermark_event_id,
+            watermark_sequence=cycle.watermark_sequence,
+            base_soul_state_hash=cycle.base_soul_state_hash,
+            base_memory_set_version=cycle.base_memory_set_version,
+            base_memory_root=cycle.base_memory_root,
+            base_system_state_hash=cycle.base_system_state_hash,
+            constitution_hash=self.get_constitution_hash(),
+            additions=buckets["additions"],
+            corrections=buckets["corrections"],
+            supersessions=buckets["supersessions"],
+            session_only=buckets["session_only"],
+            rejected=buckets["rejected"],
+            deferred=buckets["deferred"],
+            routed_proposals=buckets["routed_proposals"],
+        )
+
+    def _replace_targets(self, cur, contra_json, eps, new_mem_set, prior_texts, text) -> List[str]:
+        refs: List[str] = []
+        if contra_json:
+            try:
+                refs = [r for r in json.loads(contra_json) if r in new_mem_set]
+            except json.JSONDecodeError:
+                refs = []
+        if not refs:
+            nli = getattr(self.kernel_or_conn_fn, "nli_engine", None)
+            if nli and text:
+                for mid, mtext in prior_texts.items():
+                    if mid not in new_mem_set or not mtext:
+                        continue
+                    _, cscore = nli.predict(mtext, text)
+                    if cscore >= 0.60:
+                        refs.append(mid)
+        if not refs and eps:
+            qmarks = ",".join("?" * len(eps))
+            for (ek,) in cur.execute(
+                f"SELECT DISTINCT entity_key FROM episodes WHERE id IN ({qmarks}) AND entity_key IS NOT NULL;",
+                eps,
+            ).fetchall():
+                for (old_id,) in cur.execute(
+                    """SELECT rm.id FROM reviewed_memories rm
+                       JOIN json_each(rm.source_episode_refs_json) j
+                       JOIN episodes e ON e.id = j.value
+                       WHERE rm.retention_state = 'accessible' AND e.entity_key = ?;""",
+                    (ek,),
+                ).fetchall():
+                    if old_id in new_mem_set:
+                        refs.append(old_id)
+        return list(dict.fromkeys(refs))
+
     def generate_cycle_preview(self, cycle_id: str) -> dict:
         """
         Perform 12-point deterministic validation and generate atomic preview payload.
@@ -1115,15 +1386,33 @@ class SoulReviewEngine:
         cycle = self.get_cycle_by_id(cycle_id)
         if not cycle:
             raise ValueError(f"Cycle {cycle_id} not found")
+        if cycle.status == "committed":
+            raise ValueError("Review cycle already committed")
 
         with self._get_conn() as conn:
             cur = conn.cursor()
             # Rule 10: Verify watermark event integrity
-            cur.execute("SELECT id, sequence, origin_kind, event_kind, payload_hash, previous_event_hash, event_hash FROM host_events WHERE id = ?;", (cycle.watermark_event_id,))
+            cur.execute("""
+            SELECT session_id, user_scope_key, project_scope_key, sequence,
+                   origin_kind, event_kind, payload_hash, previous_event_hash,
+                   occurred_at, event_hash
+            FROM host_events WHERE id = ?;
+            """, (cycle.watermark_event_id,))
             w_row = cur.fetchone()
             if not w_row:
                 raise ValueError(f"Watermark event {cycle.watermark_event_id} not found")
-            if w_row[6] and w_row[6].startswith("sha256:corrupted"):
+            expected = compute_host_event_hash(
+                session_id=w_row[0],
+                user_scope_key=w_row[1],
+                project_scope_key=w_row[2],
+                sequence=w_row[3],
+                origin_kind=w_row[4],
+                event_kind=w_row[5],
+                payload_hash=w_row[6],
+                previous_event_hash=w_row[7],
+                occurred_at=w_row[8],
+            )
+            if w_row[9] != expected:
                 raise ValueError("Integrity violation: Watermark host event hash is corrupted")
             
             # Fetch all decided candidates
@@ -1138,71 +1427,17 @@ class SoulReviewEngine:
             WHERE d.cycle_id = ?;
             """, (cycle_id,))
             rows = cur.fetchall()
-
-            additions = []
-            corrections = []
-            supersessions = []
-            session_only = []
-            rejected = []
-            deferred = []
-            routed_proposals = []
-
-            for r in rows:
-                dec_id, dec, cand_id, res_cand_id, ctype, text, prov, scope, eps_json, conf, rtext, rtype = r
-                item = {
-                    "id": cand_id,
-                    "decision_id": dec_id,
-                    "canonical_text": text,
-                    "scope": scope,
-                    "type": ctype
-                }
-                if dec == "remember":
-                    if scope == "session_only":
-                        session_only.append(item)
-                    else:
-                        additions.append(item)
-                elif dec == "session_only":
-                    session_only.append(item)
-                elif dec == "keep_both_with_context":
-                    additions.append(item)
-                elif dec == "keep_old":
-                    rejected.append(item)
-                elif dec == "correct":
-                    corrections.append({
-                        "id": cand_id,
-                        "revised_id": res_cand_id,
-                        "original_text": text,
-                        "revised_text": rtext,
-                        "scope": scope
-                    })
-                elif dec == "replace_old":
-                    supersessions.append(item)
-                elif dec == "reject" or dec == "reject_both":
-                    rejected.append(item)
-                elif dec == "defer":
-                    deferred.append(item)
+            buckets = self._preview_buckets(rows)
+            additions = buckets["additions"]
+            corrections = buckets["corrections"]
+            supersessions = buckets["supersessions"]
+            session_only = buckets["session_only"]
+            rejected = buckets["rejected"]
+            deferred = buckets["deferred"]
+            routed_proposals = buckets["routed_proposals"]
 
             salt = cycle.preview_hash_salt or generate_salt()
-            preview_hash = compute_preview_hash(
-                salt=salt,
-                cycle_id=cycle_id,
-                user_scope_key=cycle.user_scope_key,
-                project_scope_key=cycle.project_scope_key,
-                watermark_event_id=cycle.watermark_event_id,
-                watermark_sequence=cycle.watermark_sequence,
-                base_soul_state_hash=cycle.base_soul_state_hash,
-                base_memory_set_version=cycle.base_memory_set_version,
-                base_memory_root=cycle.base_memory_root,
-                base_system_state_hash=cycle.base_system_state_hash,
-                constitution_hash=self.get_constitution_hash(),
-                additions=additions,
-                corrections=corrections,
-                supersessions=supersessions,
-                session_only=session_only,
-                rejected=rejected,
-                deferred=deferred,
-                routed_proposals=routed_proposals
-            )
+            preview_hash = self._cycle_preview_hash(cycle, salt, buckets)
 
             preview_payload = {
                 "cycle_id": cycle_id,
@@ -1232,6 +1467,32 @@ class SoulReviewEngine:
 
         return preview_payload
 
+    def _committed_receipt(self, cycle_id: str) -> dict:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT id, receipt_hash, result_memory_set_version, result_memory_root,
+                       affected_memory_ids_json
+                FROM memory_change_receipts
+                WHERE cycle_id = ?
+                ORDER BY committed_at DESC LIMIT 1;
+                """,
+                (cycle_id,),
+            ).fetchone()
+        if not row:
+            raise ValueError(f"Review cycle {cycle_id} is committed but has no receipt")
+        ids = json.loads(row[4] or "[]")
+        return {
+            "status": "committed",
+            "cycle_id": cycle_id,
+            "receipt_id": row[0],
+            "receipt_hash": row[1],
+            "memory_set_version": row[2],
+            "memory_root": row[3],
+            "affected_memories": ids,
+            "promoted_memory_ids": ids,
+        }
+
     def commit_review_cycle(
         self,
         cycle_id: str,
@@ -1249,6 +1510,8 @@ class SoulReviewEngine:
         cycle = self.get_cycle_by_id(cycle_id)
         if not cycle:
             raise ValueError(f"Review cycle {cycle_id} not found")
+        if cycle.status == "committed":
+            raise ValueError("Review cycle already committed")
         if not cycle.preview_hash or not cycle.preview_json:
             raise ValueError("Cannot commit cycle without a generated preview")
 
@@ -1262,20 +1525,16 @@ class SoulReviewEngine:
 
             auth_event_hash = ev_row[1]
             now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            if cycle.preview_created_at and ev_row[2]:
+                def _iso(ts: str) -> datetime.datetime:
+                    raw = (ts or "").replace("Z", "+00:00")
+                    dt = datetime.datetime.fromisoformat(raw)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=datetime.timezone.utc)
+                    return dt
+                if _iso(ev_row[2]) < _iso(cycle.preview_created_at):
+                    raise ValueError("Pre-commit check 13 failed: commit event must occur after preview")
 
-            # Begin atomic transaction
-            conn.execute("BEGIN IMMEDIATE;")
-
-            # Fetch active members of current memory set version
-            cur.execute("""
-            SELECT m.id, m.content_hash, m.canonical_text
-            FROM memory_set_members mem
-            JOIN reviewed_memories m ON mem.memory_id = m.id
-            WHERE mem.owner_user_scope_key = ? AND mem.version = ? AND m.retention_state = 'accessible';
-            """, (cycle.user_scope_key, cycle.base_memory_set_version))
-            prior_members = {r[0]: r[1] for r in cur.fetchall()}
-
-            # Fetch decisions
             cur.execute("""
             SELECT d.id, d.decision, d.candidate_id, d.result_candidate_id,
                    c.candidate_type, c.canonical_text, c.original_provenance,
@@ -1287,31 +1546,87 @@ class SoulReviewEngine:
             WHERE d.cycle_id = ?;
             """, (cycle_id,))
             dec_rows = cur.fetchall()
+            if not cycle.preview_hash_salt or self._cycle_preview_hash(
+                cycle, cycle.preview_hash_salt, self._preview_buckets(dec_rows)
+            ) != cycle.preview_hash:
+                raise ValueError("preview hash does not match current decisions; regenerate preview")
+
+            conn.execute("BEGIN IMMEDIATE;")
+
+            cur.execute(
+                "SELECT COALESCE(MAX(version), 0) FROM memory_set_versions WHERE owner_user_scope_key = ?;",
+                (cycle.user_scope_key,),
+            )
+            tip = int(cur.fetchone()[0] or 0)
+            prior_root = cycle.base_memory_root
+            if tip:
+                row_root = cur.execute(
+                    """SELECT memory_root FROM memory_set_versions
+                       WHERE owner_user_scope_key = ? AND version = ?;""",
+                    (cycle.user_scope_key, tip),
+                ).fetchone()
+                if row_root:
+                    prior_root = row_root[0]
+            cur.execute("""
+            SELECT m.id, m.content_hash, m.canonical_text
+            FROM memory_set_members mem
+            JOIN reviewed_memories m ON mem.memory_id = m.id
+            WHERE mem.owner_user_scope_key = ? AND mem.version = ? AND m.retention_state = 'accessible';
+            """, (cycle.user_scope_key, tip))
+            prior_rows = cur.fetchall()
+            prior_members = {r[0]: r[1] for r in prior_rows}
+            prior_texts = {r[0]: r[2] for r in prior_rows}
 
             new_mem_set = dict(prior_members)
             affected_memory_ids = []
 
             for r in dec_rows:
                 dec_id, dec, cand_id, res_cand_id, ctype, text, prov, scope, eps_json, conf, rtext, rtype, contra_json = r
-                if dec in ("remember", "replace_old", "keep_both_with_context") and scope != "session_only":
+                eps = json.loads(eps_json) if eps_json else []
+                if dec == "reject_both":
+                    for old_id in self._replace_targets(cur, contra_json, eps, new_mem_set, prior_texts, text):
+                        if old_id in new_mem_set:
+                            del new_mem_set[old_id]
+                            affected_memory_ids.append(old_id)
+                    continue
+                if dec == "session_only" or (
+                    dec in ("remember", "replace_old", "keep_both_with_context") and scope != "session_only"
+                ) or (dec == "remember" and scope == "session_only"):
                     superseded_id = None
-                    if dec == "replace_old" and contra_json:
-                        contra_refs = json.loads(contra_json)
-                        for c_ref in contra_refs:
-                            if c_ref in new_mem_set:
-                                del new_mem_set[c_ref]
-                                superseded_id = c_ref
-                                affected_memory_ids.append(c_ref)
+                    prom_scope = "session_only" if dec == "session_only" else scope
+                    if dec == "replace_old":
+                        for old_id in self._replace_targets(cur, contra_json, eps, new_mem_set, prior_texts, text):
+                            if old_id in new_mem_set:
+                                del new_mem_set[old_id]
+                                superseded_id = old_id
+                                affected_memory_ids.append(old_id)
+                    if dec == "remember" and not superseded_id:
+                        qmarks = ",".join("?" * len(eps)) if eps else ""
+                        if eps:
+                            for (ek,) in cur.execute(
+                                f"SELECT DISTINCT entity_key FROM episodes WHERE id IN ({qmarks}) AND entity_key IS NOT NULL;",
+                                eps,
+                            ).fetchall():
+                                for (old_id,) in cur.execute(
+                                    """SELECT rm.id FROM reviewed_memories rm
+                                       JOIN json_each(rm.source_episode_refs_json) j
+                                       JOIN episodes e ON e.id = j.value
+                                       WHERE rm.retention_state = 'accessible' AND e.entity_key = ?;""",
+                                    (ek,),
+                                ).fetchall():
+                                    if old_id in new_mem_set:
+                                        del new_mem_set[old_id]
+                                        superseded_id = old_id
+                                        affected_memory_ids.append(old_id)
 
                     mem_id = f"rmem_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
                     m_salt = generate_salt()
-                    eps = json.loads(eps_json)
                     content_hash = compute_memory_content_hash(
                         salt=m_salt,
                         canonical_text=text,
                         memory_type=ctype,
                         provenance=prov,
-                        scope=scope,
+                        scope=prom_scope,
                         owner_user_scope_key=cycle.user_scope_key,
                         scope_key=cycle.project_scope_key or cycle.user_scope_key,
                         source_episode_refs=eps,
@@ -1327,7 +1642,7 @@ class SoulReviewEngine:
                         review_decision_ref, supersedes_memory_id, confidence, content_hash, created_at, content_hash_salt
                     ) VALUES (?, ?, ?, ?, 'accessible', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """, (
-                        mem_id, text, ctype, prov, scope,
+                        mem_id, text, ctype, prov, prom_scope,
                         cycle.user_scope_key, cycle.project_scope_key or cycle.user_scope_key,
                         eps_json, dec_id, superseded_id, conf, content_hash, now_iso, m_salt
                     ))
@@ -1339,13 +1654,24 @@ class SoulReviewEngine:
                     except Exception:
                         pass
 
-                    new_mem_set[mem_id] = content_hash
+                    if prom_scope != "session_only":
+                        new_mem_set[mem_id] = content_hash
                     affected_memory_ids.append(mem_id)
 
                 elif dec == "correct":
                     mem_id = f"rmem_{int(datetime.datetime.now().timestamp()*1000)}_{uuid.uuid4().hex[:8]}"
                     m_salt = generate_salt()
                     eps = json.loads(eps_json)
+                    # A correction supersedes the wrong fact it corrects: retire
+                    # accessible memories sharing the corrected episodes' entity
+                    # keys (same supersession rule `remember` uses), so the old
+                    # text can't stay active and re-flag NLI tensions forever.
+                    correction_superseded_ids = []
+                    for old_id in self._replace_targets(cur, contra_json, eps, new_mem_set, prior_texts, rtext):
+                        if old_id in new_mem_set:
+                            del new_mem_set[old_id]
+                            affected_memory_ids.append(old_id)
+                            correction_superseded_ids.append(old_id)
                     content_hash = compute_memory_content_hash(
                         salt=m_salt,
                         canonical_text=rtext,
@@ -1356,7 +1682,8 @@ class SoulReviewEngine:
                         scope_key=cycle.project_scope_key or cycle.user_scope_key,
                         source_episode_refs=eps,
                         review_decision_ref=dec_id,
-                        supersedes_memory_id=None,
+                        supersedes_memory_id=(correction_superseded_ids[0]
+                                              if correction_superseded_ids else None),
                         confidence=1.0
                     )
 
@@ -1365,11 +1692,13 @@ class SoulReviewEngine:
                         id, canonical_text, memory_type, provenance, retention_state,
                         scope, owner_user_scope_key, scope_key, source_episode_refs_json,
                         review_decision_ref, supersedes_memory_id, confidence, content_hash, created_at, content_hash_salt
-                    ) VALUES (?, ?, ?, ?, 'accessible', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?);
+                    ) VALUES (?, ?, ?, ?, 'accessible', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """, (
                         mem_id, rtext, rtype or "correction", prov, scope,
                         cycle.user_scope_key, cycle.project_scope_key or cycle.user_scope_key,
-                        eps_json, dec_id, 1.0, content_hash, now_iso, m_salt
+                        eps_json, dec_id,
+                        (correction_superseded_ids[0] if correction_superseded_ids else None),
+                        1.0, content_hash, now_iso, m_salt
                     ))
                     try:
                         cur.execute(
@@ -1383,7 +1712,7 @@ class SoulReviewEngine:
                     affected_memory_ids.append(mem_id)
 
             # Compute new memory root
-            new_version = cycle.base_memory_set_version + 1
+            new_version = tip + 1
             member_list = [{"memory_id": mid, "memory_content_hash": mhash} for mid, mhash in new_mem_set.items()]
             new_memory_root = compute_memory_root(cycle.user_scope_key, member_list)
             const_hash = self.get_constitution_hash()
@@ -1411,13 +1740,13 @@ class SoulReviewEngine:
                 watermark_sequence=cycle.watermark_sequence,
                 prior_soul_state_hash=cycle.base_soul_state_hash,
                 result_soul_state_hash=cycle.base_soul_state_hash,
-                prior_memory_set_version=cycle.base_memory_set_version,
+                prior_memory_set_version=tip,
                 result_memory_set_version=new_version,
-                prior_memory_root=cycle.base_memory_root,
+                prior_memory_root=prior_root,
                 result_memory_root=new_memory_root,
                 prior_system_state_hash=cycle.base_system_state_hash,
                 result_system_state_hash=new_sys_hash,
-                rollback_reference=str(cycle.base_memory_set_version),
+                rollback_reference=str(tip),
                 affected_memory_ids=affected_memory_ids,
                 candidate_decision_summary={"total_decisions": len(dec_rows)},
                 committed_at=now_iso
@@ -1440,10 +1769,10 @@ class SoulReviewEngine:
                 cycle_id, cycle.preview_hash, cycle.preview_hash, auth_event_hash,
                 const_hash, cycle.watermark_event_id, cycle.watermark_sequence,
                 cycle.base_soul_state_hash, cycle.base_soul_state_hash,
-                cycle.base_memory_set_version, new_version,
-                cycle.base_memory_root, new_memory_root,
+                tip, new_version,
+                prior_root, new_memory_root,
                 cycle.base_system_state_hash, new_sys_hash,
-                str(cycle.base_memory_set_version), json.dumps(affected_memory_ids),
+                str(tip), json.dumps(affected_memory_ids),
                 json.dumps({"total_decisions": len(dec_rows)}), receipt_hash, now_iso
             ))
 
@@ -1454,8 +1783,8 @@ class SoulReviewEngine:
                 memory_root, cycle_id, receipt_ref, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """, (
-                new_version, cycle.user_scope_key, cycle.base_memory_set_version,
-                cycle.base_memory_root, new_memory_root, cycle_id, receipt_id, now_iso
+                new_version, cycle.user_scope_key, tip,
+                prior_root, new_memory_root, cycle_id, receipt_id, now_iso
             ))
 
             # Insert members
@@ -1500,26 +1829,54 @@ class SoulReviewEngine:
             "promoted_memory_ids": affected_memory_ids
         }
 
-    def recover_unsealed_cycles(self, user_scope_key: Optional[str] = None) -> List[str]:
-        """Detect and mark unsealed review cycles as recovery_required upon startup (FR-5)."""
+    def recover_unsealed_cycles(self, user_scope_key: Optional[str] = None, *, on_boot: bool = False) -> List[str]:
+        """Mark unsealed cycles recovery_required. Boot skips live SEAL (fresh active/reviewing)."""
+        always = {"pending_commit", "idle_pending"}
+        live = {"active", "preparing", "reviewing"}
+        watch = always | live
+        stale_before = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+        placeholders = ",".join("?" for _ in watch)
         with self._get_lock(), self._get_conn() as conn:
             cur = conn.cursor()
+            params: List[Any] = list(watch)
             if user_scope_key:
-                cur.execute("""
-                SELECT id FROM review_cycles
-                WHERE user_scope_key = ? AND status IN ('active', 'idle_pending', 'preparing', 'reviewing', 'pending_commit');
-                """, (user_scope_key,))
+                cur.execute(
+                    f"""
+                    SELECT id, status, opened_at FROM review_cycles
+                    WHERE user_scope_key = ? AND status IN ({placeholders});
+                    """,
+                    [user_scope_key, *params],
+                )
             else:
-                cur.execute("""
-                SELECT id FROM review_cycles
-                WHERE status IN ('active', 'idle_pending', 'preparing', 'reviewing', 'pending_commit');
-                """)
-            unsealed_ids = [r[0] for r in cur.fetchall()]
-
-            for cid in unsealed_ids:
-                cur.execute("""
-                UPDATE review_cycles SET status = 'recovery_required' WHERE id = ?;
-                """, (cid,))
+                cur.execute(
+                    f"""
+                    SELECT id, status, opened_at FROM review_cycles
+                    WHERE status IN ({placeholders});
+                    """,
+                    params,
+                )
+            unsealed_ids: List[str] = []
+            for cid, status, opened_at in cur.fetchall():
+                if on_boot:
+                    if status in always:
+                        pass
+                    elif status in live:
+                        raw = (opened_at or "").replace("Z", "+00:00")
+                        try:
+                            opened = datetime.datetime.fromisoformat(raw)
+                        except ValueError:
+                            opened = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+                        if opened.tzinfo is None:
+                            opened = opened.replace(tzinfo=datetime.timezone.utc)
+                        if opened >= stale_before:
+                            continue
+                    else:
+                        continue
+                unsealed_ids.append(cid)
+                cur.execute(
+                    "UPDATE review_cycles SET status = 'recovery_required' WHERE id = ?;",
+                    (cid,),
+                )
 
             conn.commit()
             return unsealed_ids
@@ -1532,6 +1889,12 @@ class SoulReviewEngine:
             row = cur.fetchone()
             if not row:
                 raise ValueError(f"Cycle {cycle_id} not found")
+            if not row[0]:
+                raise ValueError(
+                    f"Cycle {cycle_id} is not provisional — refusing to invalidate")
+            if row[1] in ("committed", "deferred"):
+                raise ValueError(
+                    f"Cycle {cycle_id} already terminal (status={row[1]!r})")
 
             now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
             cur.execute("""
@@ -1578,8 +1941,8 @@ class SoulReviewEngine:
                   ? IS NULL
                   OR rm.scope_key = ?
                   OR rm.scope = 'user'
-                  OR rm.scope = 'session_only'
               )
+              AND IFNULL(rm.scope, '') != 'session_only'
             ORDER BY rm.created_at DESC;
             """, (user_scope_key, user_scope_key, project_scope_key, project_scope_key))
             rows = cur.fetchall()

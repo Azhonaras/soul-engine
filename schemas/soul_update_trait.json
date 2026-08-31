@@ -1,1 +1,25 @@
-{"name":"soul_update_trait","description":"Propose an update to a bounded control trait parameter (e.g. sycophancy, audacity, epistemic_humility). MCP callers cannot self-attest human approval.","parameters":{"properties":{"evidence_refs":{"items":{"type":"string"},"type":"array"},"new_value":{"type":"number"},"trait":{"type":"string"}},"required":["trait","new_value"],"type":"object"}}
+{
+  "name": "soul_update_trait",
+  "description": "Propose an update to a bounded control trait parameter (e.g. sycophancy, audacity, epistemic_humility). Autonomous writes need >=2 evidence_refs, |\u0394|<=10, 7-day |\u0394| sum<=30.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "trait": {
+        "type": "string"
+      },
+      "new_value": {
+        "type": "number"
+      },
+      "evidence_refs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "trait",
+      "new_value"
+    ]
+  }
+}

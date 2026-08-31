@@ -32,6 +32,9 @@ Before submitting a pull request, ensure the suite passes (same command as CI):
 
 ```bash
 python -m unittest discover -s tests
+
+# mechanism harness (pre-registered P1-P4 criteria)
+python soul_mechanism_harness.py
 ```
 
 ---
@@ -47,7 +50,11 @@ When contributing code to `soul_kernel.py` or `soul_mcp_server.py`, you must pre
    All database writes must execute under `BEGIN IMMEDIATE;` to guarantee zero version race condition collisions.
 3. **Neuromodulatory clamping**:
    All traits must strictly adhere to their constitutional bounds $[min, max]$ defined in the Genesis Constitution.
-4. Preserve human origin: MCP cannot mint `origin_kind=human`. Humans type `SEAL` in any MCP chat to review memory, then use `soul_host` on a tty (`SEAL` then `COMMIT`).
+3b. **Finite-number trust boundary**:
+   All reward valences, confidences, and dream likelihoods must be `math.isfinite`-checked *before* clamping (`min/max` do not reject NaN). Out-of-range likelihoods clamp to [-1, 1]; non-finite ones are excluded from means, never averaged in.
+3c. **RPE expectation integrity**:
+   Expectations update via the Robbins-Monro rate (`alpha_for(ctx)`), never a constant alpha; visit counts persist in `rpe_expectations.updates`. Imagined content never writes expectations — dreams touch only the trust EWMA.
+4. Preserve human origin: MCP cannot mint `origin_kind=human`. Interview starts at work-done / subject-finished / before-plan (Review plan). Completing this run’s picks promotes (`soul_review_chat_commit`). `/seacom` for leftover pending. Optional tty: `soul_host` (`SEAL` then `COMMIT`). Heal, rollback, and delete in chat pass `session_id`.
 
 ---
 

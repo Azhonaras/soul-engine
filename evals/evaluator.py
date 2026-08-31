@@ -14,7 +14,7 @@ import uuid
 import tempfile
 from typing import Dict, List, Any, Optional
 
-from soul_kernel import SoulKernel, EpisodeInput, RewardSignal
+from soul_kernel import SoulKernel, EpisodeInput, RewardSignal, _wallet_key
 from soul_review import (
     SoulReviewEngine,
     HostEvent,
@@ -186,7 +186,7 @@ class MultiTurnWorkflowEvaluator:
                                 user_scope_key=user_scope,
                                 origin_kind="human",
                                 event_kind="review_decision",
-                                payload={"confirmed_text": step.get("corrected_text")}
+                                payload={"corrected_text": step.get("corrected_text")}
                             )
                             corr_ref = c_ev.id
 
@@ -329,8 +329,84 @@ class MultiTurnWorkflowEvaluator:
                         pass
 
                     elif action == "record_reward":
-                        sig = RewardSignal(source="external_human", valence=step["delta"], confidence=1.0, task_context="eval_test")
+                        sig = RewardSignal(
+                            source="external_test",
+                            valence=step["delta"],
+                            confidence=1.0,
+                            task_context="eval_test",
+                            evidence_receipt=f"eval_{session_id}_{uuid.uuid4().hex[:8]}",
+                        )
                         kernel.process_reward(sig)
+
+                    # ---- plan-wallet subsystem (1.2.0) ----
+                    elif action == "record_solver_step":
+                        kernel.record_solver_step(
+                            tool=step.get("tool", "t"),
+                            method=step.get("method", "m"),
+                            outcome=step.get("outcome", "succeed"),
+                            receipt=step.get("receipt", f"eval_{uuid.uuid4().hex[:8]}"),
+                            session_id=session_id,
+                            plan_id=step.get("plan_id", ""),
+                            agent_id=step.get("agent_id", ""),
+                        )
+
+                    elif action == "close_plan":
+                        closed = kernel.record_solver_step(
+                            tool="plan", method="wrap", outcome="succeed",
+                            receipt=f"eval_close_{uuid.uuid4().hex[:6]}",
+                            session_id=session_id,
+                            plan_id=step.get("plan_id", ""),
+                            agent_id=step.get("agent_id", ""),
+                            close_plan=True,
+                        )
+                        if not closed.get("wrote_episode"):
+                            raise ValueError("close_plan did not quarantine traces")
+
+                    elif action == "verify_working_scoped":
+                        dig = kernel.get_memory_digest(
+                            limit=None,
+                            plan_id=step.get("plan_id", ""),
+                            agent_id=step.get("agent_id", ""),
+                        )
+                        n = len(dig.get("working") or [])
+                        if n != step.get("expected_count", 0):
+                            raise ValueError(
+                                f"working count for {step['plan_id']}/{step['agent_id']}: "
+                                f"got {n}, expected {step.get('expected_count')}")
+
+                    elif action == "verify_plan_closed":
+                        dig = kernel.get_memory_digest(
+                            plan_id=step.get("plan_id", ""), agent_id=step.get("agent_id", ""))
+                        if dig.get("working"):
+                            raise ValueError(f"overlay not dropped after close_plan: {step['plan_id']}")
+
+                    elif action == "expect_idle_internal_refused":
+                        try:
+                            kernel.process_reward(RewardSignal(
+                                source="internal_reflection", valence=0.9, confidence=1.0,
+                                task_context="idle-probe"))
+                            raise AssertionError("idle internal reward was accepted (gate missing)")
+                        except ValueError:
+                            pass
+
+                    elif action == "internal_reward":
+                        kernel.process_reward(RewardSignal(
+                            source="internal_dream", valence=float(step.get("valence", 0.5)),
+                            confidence=1.0, task_context="eval_inplan",
+                            plan_id=step.get("plan_id", "")))
+
+                    elif action == "verify_overlay_dopamine_positive":
+                        store = kernel._solver_store_from_conn(kernel._get_conn())
+                        key = _wallet_key(step.get("plan_id", ""), "")
+                        da = store.get("wallets", {}).get(key, {}).get("dopamine", 0.0)
+                        if not da > 0.0:
+                            raise ValueError(f"in-plan overlay dopamine not positive for {key}")
+
+                    elif action == "verify_identity_untouched_by_internal":
+                        st = kernel.get_current_state()
+                        if st.soul_version != 1:
+                            raise ValueError(
+                                f"internal reward bumped identity to version {st.soul_version}")
 
                     elif action == "verify_trait_bound":
                         state = kernel.get_current_state()
@@ -384,7 +460,7 @@ class MultiTurnWorkflowEvaluator:
                                     user_scope_key=user_scope,
                                     origin_kind="human",
                                     event_kind="review_decision",
-                                    payload={"confirmed_text": corr_text}
+                                    payload={"corrected_text": corr_text}
                                 )
                                 corr_ref = c_ev.id
                             kernel.record_review_decision(

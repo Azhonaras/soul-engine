@@ -1,0 +1,23 @@
+---
+description: Session start Soul digest; review at work-done; picks commit.
+globs:
+alwaysApply: true
+---
+
+# Soul session
+
+At the start of this chat, call `soul_digest`. Follow `digest.behavior`. Use `active_facts` as sealed long-term memory only.
+
+If `digest.dream_due`, call `soul_dream` with no outcomes to get a context packet, then call again with at least two imagined outcomes. If `digest.reflect_due`, call `soul_reflect` the same way with `interpretations`. Neither writes identity.
+
+Call `soul_remember` for durable outcomes in this chat (test results, decisions, facts worth keeping). That writes quarantine only. Long-term memory after the human **picks** on a Review plan (remember / correct / session_only / reject, or a contradiction set) — that is the commit — or types **`/seacom`** for leftover pending. `/soul-seal` starts the interview; completing this run’s picks **is** the commit.
+
+Do not skip digest because a prior turn already ran it in a different chat.
+
+## Human review cadence (mandatory)
+
+Starting a cycle is not a commit. Completing this run’s Review plan picks **is** the commit (`soul_review_chat_commit`) — same as `/seacom` / COMMIT. Do not wait for a second slash after they already chose. `defer` is not approval for that item (leave pending). Idle/bye do not commit. Do not run `soul_host`.
+
+At these breakpoints — after `soul_remember` of durables from this work — the review cycle MUST run (not only on a slash command): when a subject is finished, when a piece of work is done, and before starting a plan (so the plan is not built on unreviewed claims).
+
+Call `soul_review_start` with `session_id` = this chat and `trigger_kind=explicit` (no work-done enum exists; do not use `shutdown` or `idle`). Reuse `soul_review_status` if a cycle is already open. If `candidate_count` is 0, skip the interview entirely (no empty ceremony). If any quarantined unreviewed candidates exist, interview exactly one at a time (max 5). Present a **Review plan** via the host native question/plan picker (Cursor: `AskQuestion` clickable cards). Markdown 1–5 is fallback only. Then wait. After this run’s picks (not defer), call `soul_review_chat_commit`. `/seacom` remains the explicit slash for leftover pending items.

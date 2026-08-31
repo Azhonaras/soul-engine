@@ -1,1 +1,54 @@
-{"name":"soul_dream","description":"Dream sandbox: imagined thinking only, tagged no_external_action. Does not write identity.","parameters":{"properties":{"scenario_prompt":{"description":"Hypothetical scenario to simulate","type":"string"}},"required":["scenario_prompt"],"type":"object"}}
+{
+  "name": "soul_dream",
+  "description": "First call returns a context packet (needs_thought). Second call records >=2 imagined outcomes. Does not write identity.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "scenario_prompt": {
+        "type": "string",
+        "description": "Hypothetical scenario"
+      },
+      "task_context": {
+        "type": "string",
+        "description": "Task bucket used for RPE expectation matching (e.g. 'deploy-db-migration'). Same key later scores dreams against reality."
+      },
+      "outcomes": {
+        "type": "array",
+        "description": "At least two imagined outcomes (strings or branch objects). Omit to receive the context packet. Branch objects may carry 'likelihood' (-1..1, signed predicted valence) so reality scoring can compute a dream-RPE.",
+        "items": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "variable_flipped": {
+                  "type": "string"
+                },
+                "hypothesis": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "likelihood": {
+                  "type": "number"
+                },
+                "severity": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

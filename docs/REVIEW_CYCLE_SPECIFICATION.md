@@ -1,8 +1,8 @@
-﻿# Soul Review Cycle (implemented v1.1.1)
+# Soul Review Cycle (implemented v1.2.0)
 
 **Normative source:** [CONSTITUTION.md](./CONSTITUTION.md) • [ARCHITECTURE.md](./ARCHITECTURE.md)  
 **Code:** `soul_review.py`, `soul_kernel.py`, `soul_host.py`, MCP tools in `soul_mcp_server.py`  
-**Schema:** `SCHEMA_VERSION = 7` (`host_events`, `review_cycles`, `memory_candidates`, `review_decisions`, `reviewed_memories`, `memory_set_versions`, `memory_set_members`, `neuromodulators`, …)
+**Schema:** `SCHEMA_VERSION = 9` (`host_events`, `review_cycles`, `memory_candidates`, `review_decisions`, `reviewed_memories`, `memory_set_versions`, `memory_set_members`, `neuromodulators`, `daemon_flags`, `trait_drift_log`, `episodes.retention_until`, …)
 
 Long-term / default recall = **`reviewed_memories` after commit**. Raw ingest stays in **`episodes`** (quarantine).
 
@@ -10,31 +10,36 @@ Long-term / default recall = **`reviewed_memories` after commit**. Raw ingest st
 
 ## 1. Pipeline
 
-```text
-conversation / soul_remember
-→ quarantined episodes
-→ soul_review_start (watermark + extract)
-→ human types SEAL in any MCP chat (interview)
-→ human-origin decision events
-→ exact preview
-→ separate human-origin commit
-→ reviewed_memories + receipt
-```
+| Stage | Persisted effect | User-visible effect |
+| :--- | :--- | :--- |
+| **Capture** | `soul_remember` inserts a quarantined `episodes` row | Nothing enters default recall |
+| **Open** | `soul_review_start` freezes the host-event watermark and extracts up to five candidates | Empty queue skips the interview |
+| **Choose** | Human picks `remember`, `correct`, `session_only`, `reject`, or `defer` | One Review-plan item at a time |
+| **Commit** | Any non-defer picks trigger preview validation and `soul_review_chat_commit` | New memory-set version + receipt |
+| **Defer** | All-defer input leaves candidates for later | No preview, promotion, or receipt |
 
-A review cycle is not a chat session. Idle, “bye”, and the model must not commit. The human types **SEAL** in the agent chat; the agent writes `review_packet.json`; commit is `soul_host` (type `SEAL` then `COMMIT`). Same on every harness.
+A review cycle is not a chat session. Idle, “bye”, and the model must not commit. **Start interview** ≠ **promote**. Breakpoints open a **Review plan**; they do not write `reviewed_memories`. Completing this run’s picks **is** the commit (`soul_review_chat_commit`), same as **`/seacom`** / COMMIT. `defer` is not approval. **`/seacom`** remains the explicit slash for leftover pending. Optional tty: `soul_host` (type `SEAL` then `COMMIT`). Same on every harness. Note that Tier-2 destructive operations (identity rollback, level 2/3 heal, memory rollback, memory deletion) require out-of-band authorization via `soul-host` CLI commands and cannot be executed via chat.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active
-    Active --> Preparing: start
-    Preparing --> Ready: extracted
-    Ready --> Reviewing: decisions
-    Reviewing --> Pending: preview
-    Pending --> Committed: commit
-    Pending --> Reviewing: redo
-    Ready --> Empty: no change
-    Reviewing --> Deferred: postpone
-    Committed --> [*]
+    direction LR
+    [*] --> active: open cycle + freeze watermark
+    active --> review_ready: candidates extracted
+    active --> sealed_no_changes: no eligible candidates
+    review_ready --> pending_commit: decisions + canonical preview
+    review_ready --> deferred: all choices deferred
+    pending_commit --> committed: atomic commit + receipt
+    pending_commit --> recovery_required: interrupted before seal
+    recovery_required --> active: recover unsealed cycle
+    idle_pending --> recovery_required: provisional cycle interrupted
+    committed --> [*]
+    sealed_no_changes --> [*]
+    deferred --> [*]
+
+    note right of review_ready
+      Candidate states carry the item-level detail:
+      pending, confirmed, corrected, rejected, deferred.
+    end note
 ```
 
 ---
@@ -45,8 +50,8 @@ stateDiagram-v2
 2. **Decisions** (normal): `remember`, `correct`, `session_only`, `reject`, `defer`.  
    Contradiction: `replace_old`, `keep_both_with_context`, `keep_old`, `reject_both`, `defer`.  
    Human confirm means “store this representation,” **not** “this is objectively verified.”
-3. **Preview** then **commit**. Prior “remember” answers are not enough. `soul_host`: type `SEAL` (one human event per decision) then `COMMIT` (commit event bound to preview).
-4. **MCP** `soul_review_commit` is the same tool in every harness. It requires `origin_kind=human`. That row comes from `soul_host` SEAL, not from MCP `soul_host_event`.
+3. **Preview** then **commit**. Starting the cycle is not enough. Chat promote: this run’s Review plan picks, or **`/seacom`** / COMMIT for leftover pending (`soul_review_chat_commit`). Optional tty: `soul_host` type `SEAL` (one human event per decision) then `COMMIT` (commit event bound to preview).
+4. **MCP** `soul_review_commit` still requires `origin_kind=human`. Chat COMMIT is `soul_review_chat_commit` after the interview (instruction-gated). `soul_host_event` cannot mint a human row.
 
 ---
 
@@ -73,11 +78,12 @@ CREATE TABLE candidate_extractions (...);
 | Tool | What it does |
 | :--- | :--- |
 | `soul_host_event` | Chain an event. Origin never `human` on MCP. |
-| `soul_review_start` | Open cycle, extract candidates (`session_id`, `trigger_kind`). |
+| `soul_review_start` | Open cycle, extract candidates (`session_id`, `trigger_kind=explicit`). Call at work-done / subject-finished / before-plan if quarantine is non-empty. |
 | `soul_review_status` | Pending candidates / preview hash. |
 | `soul_review_stage_decision` | Stage one decision; `human_event_ref` must be origin `human`. |
 | `soul_review_preview` | Persist preview hash. |
-| `soul_review_commit` | Promote batch; `commit_human_event_ref` origin `human`. |
+| `soul_review_commit` | Promote batch; `commit_human_event_ref` origin `human` (tty/`soul_host` path). |
+| `soul_review_chat_commit` | After this run’s Review plan picks (not cycle start), promote. Also `/seacom` / `COMMIT` for leftover pending. |
 | `soul_memory_rollback` | Forward-only memory-set version copy. |
 | `soul_memory_delete` | Salted deletion cascade. |
 
@@ -85,6 +91,6 @@ CREATE TABLE candidate_extractions (...);
 
 ## 5. Defenses
 
-1. **Human origin.** Packet → `py -3 -m soul_host seal review_packet.json` → type **SEAL** then **COMMIT**. MCP `soul_review_commit` uses that human row; it cannot mint one.
+1. **Human origin.** Chat: Review plan picks or **`/seacom`** → `soul_review_chat_commit`. Tier-2 destructive operations (rollback / delete / heal L2+) require out-of-band operator authorization via `soul-host` CLI commands (`soul-host approve rollback-identity <version>`, `soul-host approve delete-memory <memory_id>`, etc.). MCP `soul_host_event` cannot mint a human row.
 2. **Quarantine.** Unreviewed `episodes` are omitted from default `soul_recall` / `soul_digest`.
 3. **Deletion.** `soul_memory_delete` redacts text and erases salts; versions move forward only.

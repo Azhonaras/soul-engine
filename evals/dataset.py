@@ -1,4 +1,4 @@
-﻿"""Soul Engine MCP-Evals Benchmark Dataset.
+"""Soul Engine MCP-Evals Benchmark Dataset.
 
 Contains comprehensive benchmark cases for:
 1. Single-Turn Tool Routing (Precision & Recall)
@@ -15,8 +15,8 @@ SINGLE_TURN_EVALS: List[Dict[str, Any]] = [
         "expected_tool": "soul_remember",
         "expected_args": {
             "content": "User prefers dark mode in UI design and rejects purple gradients.",
-            "source_kind": "human",
-            "provenance": "verified",
+            "source_kind": "agent",
+            "provenance": "observed",
         },
         "category": "memory_ingestion"
     },
@@ -27,7 +27,7 @@ SINGLE_TURN_EVALS: List[Dict[str, Any]] = [
         "expected_args": {
             "content": "Production API endpoint for analytics service is api.analytics.internal/v2.",
             "entity_key": "api.endpoint.analytics",
-            "source_kind": "human",
+            "source_kind": "agent",
         },
         "category": "memory_ingestion"
     },
@@ -400,6 +400,35 @@ MULTI_TURN_WORKFLOWS: List[Dict[str, Any]] = [
             {"action": "verify_trait_bound", "trait": "sycophancy", "min": 0.0, "max": 0.0},
             {"action": "record_reward", "delta": 10.0, "target_trait": "curiosity"},
             {"action": "verify_trait_bound", "trait": "curiosity", "min": 0.0, "max": 100.0}
+        ]
+    },
+    {
+        "id": "wf_11_plan_wallet_lifecycle",
+        "name": "Plan-Wallet Multi-Agent Lifecycle (solver steps, isolation, close_plan)",
+        "steps": [
+            {"action": "record_solver_step", "tool": "edit", "method": "patch", "outcome": "fail",
+             "receipt": "wf_11_r1", "plan_id": "ship", "agent_id": "dev"},
+            {"action": "record_solver_step", "tool": "test", "method": "pytest", "outcome": "succeed",
+             "receipt": "wf_11_r2", "plan_id": "ship", "agent_id": "dev"},
+            {"action": "record_solver_step", "tool": "edit", "method": "refactor", "outcome": "succeed",
+             "receipt": "wf_11_r3", "plan_id": "keep", "agent_id": ""},
+            {"action": "verify_working_scoped", "plan_id": "ship", "agent_id": "dev", "expected_count": 2},
+            {"action": "verify_working_scoped", "plan_id": "keep", "agent_id": "", "expected_count": 1},
+            {"action": "close_plan", "plan_id": "ship", "agent_id": "dev"},
+            {"action": "verify_plan_closed", "plan_id": "ship", "agent_id": "dev"},
+            {"action": "verify_working_scoped", "plan_id": "keep", "agent_id": "", "expected_count": 1}
+        ]
+    },
+    {
+        "id": "wf_12_inplan_internal_reward_gate",
+        "name": "In-Plan Internal Self-Score (idle refusal + overlay-only)",
+        "steps": [
+            {"action": "expect_idle_internal_refused"},
+            {"action": "record_solver_step", "tool": "think", "method": "reflect", "outcome": "succeed",
+             "receipt": "wf_12_r1", "plan_id": "think-plan", "agent_id": ""},
+            {"action": "internal_reward", "valence": 0.8, "plan_id": "think-plan"},
+            {"action": "verify_overlay_dopamine_positive", "plan_id": "think-plan"},
+            {"action": "verify_identity_untouched_by_internal"}
         ]
     }
 ]

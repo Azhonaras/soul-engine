@@ -1,4 +1,4 @@
-﻿# Security Policy for Soul Engine
+# Security Policy for Soul Engine
 
 Soul Engine provides cryptographic identity governance, epistemic memory integrity, and human-in-the-loop review cycles for autonomous AI agents. Because Soul Engine acts as the definitive source of truth and behavioral control for agents, security, non-tamperability, and prompt-injection resistance are fundamental architecture invariants.
 
@@ -10,8 +10,8 @@ We provide active security updates, bug fixes, and vulnerability patches for the
 
 | Version | Supported | Status | Security Patch Window |
 | :--- | :---: | :--- | :--- |
-| **`v1.1.1`** | :white_check_mark: | **Active bugfix** (MCP gates, review, neuromodulators) | Zero-day patches within 72h |
-| **`v1.1.x`** | :white_check_mark: | Active line | Zero-day patches within 72h |
+| **`v1.2.0`** | :white_check_mark: | **Active / Latest Release** | Zero-day patches within 72h |
+| **`v1.1.x`** | :white_check_mark: | Prior Stable Line | Critical security fixes |
 | `v1.0.x` | :white_check_mark: | Maintenance | Critical security fixes only |
 | `< v1.0.0` | :x: | End of Life (Deprecated) | Unsupported |
 
@@ -21,9 +21,9 @@ We provide active security updates, bug fixes, and vulnerability patches for the
 
 Soul Engine enforces mathematical and cryptographic security bounds defined in the **Soul Constitution v0.2** and **Soul Review Cycle Technical Specification**:
 
-1. **Human Origin Mandatory (Rule 1 / FR-1):**
-   - AI agent/model origins (`origin_kind != "human"`) are strictly forbidden from staging review decisions, authorizing memory promotions, or executing deletions.
-   - Any attempt by an LLM to self-approve or escalate permissions is rejected at the SQLite/Kernel boundary.
+1. **Human Origin & Tier-2 Boundary (Rule 1 / FR-1):**
+   - `soul_host_event` cannot set `origin_kind=human`. Candidate promotion via `soul_review_chat_commit` mints human-origin review decisions in-kernel after user interaction.
+   - Tier-2 destructive mutations (identity rollback, Level 2/3 heal, memory set rollback, memory deletion) strictly require cryptographically signed human host events (HMAC-SHA256) authorized via out-of-band operator commands (`soul-host approve ...`). Single-use consumption is enforced inside SQLite transactions (`consumed_at`).
 
 2. **Zero-Leak Quarantine Boundary (Section 6.2 / FR-27):**
    - Raw ingested experiences remain isolated in `quarantined` state until promoted through an authorized human review cycle.

@@ -1,5 +1,5 @@
 """
-Industry-Grade Software Engineering & Resilience Test Suite for Soul Core Engine v1.1.1
+Industry-Grade Software Engineering & Resilience Test Suite for Soul Core Engine v1.2.0
 Standards: ISO/IEC/IEEE 29119, Chaos Engineering, Property-Based Fuzzing, Concurrency Saturation
 """
 
@@ -174,17 +174,24 @@ class IndustryGradeTestSuite(unittest.TestCase):
                                 source="external_test",
                                 valence=rnd.uniform(-1.0, 1.0),
                                 confidence=rnd.uniform(0.1, 0.9),
-                                task_context=f"Thread {thread_id} workload"
+                                task_context=f"Thread {thread_id} workload",
+                                evidence_receipt=f"thread_{thread_id}_op_{op_idx}",
                             ))
                         elif op_type == "trait":
                             trait_name = rnd.choice(["epistemic_humility", "curiosity", "audacity"])
+                            current = local_kernel.get_current_state().traits[trait_name]
                             low, high = ALLOWED_TRAIT_BOUNDS[trait_name]
-                            val = round(rnd.uniform(low, high), 2)
-                            local_kernel.update_trait(TraitUpdate(
-                                trait=trait_name,
-                                new_value=val,
-                                evidence_refs=[f"thread_{thread_id}"]
-                            ))
+                            lo = max(low, current - 10.0)
+                            hi = min(high, current + 10.0)
+                            val = round(rnd.uniform(lo, hi), 2)
+                            try:
+                                local_kernel.update_trait(TraitUpdate(
+                                    trait=trait_name,
+                                    new_value=val,
+                                    evidence_refs=[f"thread_{thread_id}", f"op_{op_idx}"]
+                                ))
+                            except ValueError:
+                                pass
 
                         with counts_lock:
                             op_counts[op_type] += 1
@@ -279,7 +286,8 @@ class IndustryGradeTestSuite(unittest.TestCase):
                 source="external_test",
                 valence=sign * 1.0,
                 confidence=1.0,
-                task_context=f"Extreme shock step {step}"
+                task_context=f"Extreme shock step {step}",
+                evidence_receipt=f"shock_rcp_{step:04d}_x",
             )
             state = self.kernel.process_reward(sig)
 
@@ -317,7 +325,7 @@ class IndustryGradeTestSuite(unittest.TestCase):
             ))
             if i % 10 == 0:
                 self.kernel.recall_memories(query="Memory profile iteration", limit=5)
-                self.kernel.process_reward(RewardSignal("external_test", 0.5, 0.5, "leak test"))
+                self.kernel.process_reward(RewardSignal("external_test", 0.5, 0.5, "leak test", evidence_receipt=f"leak_rcp_{i:05d}_x"))
 
         gc.collect()
         snapshot_end = tracemalloc.take_snapshot()

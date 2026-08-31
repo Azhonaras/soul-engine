@@ -1,1 +1,34 @@
-{"name":"soul_recall","description":"Search reviewed (long-term) memory via RRF hybrid, dense/hash vector, or BM25. Unreviewed quarantine is omitted.","parameters":{"properties":{"limit":{"default":5,"type":"integer"},"query":{"description":"Search query","type":"string"},"search_mode":{"default":"rrf_hybrid","enum":["rrf_hybrid","dense","bm25"],"type":"string"}},"type":"object"}}
+{
+  "name": "soul_recall",
+  "description": "Search reviewed (long-term) memory via RRF hybrid, dense/hash vector, or BM25. Unreviewed quarantine is omitted.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Search query"
+      },
+      "limit": {
+        "type": "integer",
+        "default": 5
+      },
+      "search_mode": {
+        "type": "string",
+        "enum": [
+          "rrf_hybrid",
+          "dense",
+          "bm25"
+        ],
+        "default": "rrf_hybrid"
+      },
+      "plan_id": {
+        "type": "string",
+        "description": "Optional: apply in-plan recall cap from this overlay"
+      },
+      "agent_id": {
+        "type": "string",
+        "description": "Optional: sub-agent wallet for the in-plan cap"
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "engine_version": "1.1.1",
-  "benchmark_timestamp": "2026-08-23T08:27:26.094142+00:00",
-  "duration_seconds": 0.69,
+  "engine_version": "1.2.0",
+  "benchmark_timestamp": "2026-08-31T02:41:18.020394+00:00",
+  "duration_seconds": 7.59,
   "single_turn": {
     "total_cases": 30,
     "true_positives": 27,
@@ -256,8 +256,8 @@
     ]
   },
   "multi_turn_workflows": {
-    "total_workflows": 10,
-    "passed_workflows": 10,
+    "total_workflows": 12,
+    "passed_workflows": 12,
     "adherence_rate": 1.0,
     "workflow_results": [
       {
@@ -265,70 +265,84 @@
         "name": "Standard End-to-End Review Cycle",
         "passed": true,
         "error": null,
-        "latency_ms": 35.21
+        "latency_ms": 275.27
       },
       {
         "id": "wf_02_supersession_contradiction_resolution",
         "name": "Contradiction Resolution via Supersession",
         "passed": true,
         "error": null,
-        "latency_ms": 34.09
+        "latency_ms": 221.28
       },
       {
         "id": "wf_03_correction_interview_flow",
         "name": "Human Memory Correction Flow",
         "passed": true,
         "error": null,
-        "latency_ms": 35.83
+        "latency_ms": 409.24
       },
       {
         "id": "wf_04_quarantine_isolation_check",
         "name": "Zero-Leak Quarantine Boundary Isolation",
         "passed": true,
         "error": null,
-        "latency_ms": 30.26
+        "latency_ms": 215.77
       },
       {
         "id": "wf_05_forward_only_memory_set_rollback",
         "name": "Forward-Only Memory Set Rollback",
         "passed": true,
         "error": null,
-        "latency_ms": 41.28
+        "latency_ms": 275.31
       },
       {
         "id": "wf_06_gdpr_salted_deletion_cascade",
         "name": "GDPR Salted Privacy Deletion Cascade",
         "passed": true,
         "error": null,
-        "latency_ms": 35.49
+        "latency_ms": 435.29
       },
       {
         "id": "wf_07_crash_recovery_resilience",
         "name": "Review Cycle Crash Recovery & Watermark Resync",
         "passed": true,
         "error": null,
-        "latency_ms": 36.53
+        "latency_ms": 200.93
       },
       {
         "id": "wf_08_multi_candidate_batch_review",
         "name": "Multi-Candidate Heterogeneous Review Batch",
         "passed": true,
         "error": null,
-        "latency_ms": 60.42
+        "latency_ms": 291.28
       },
       {
         "id": "wf_09_idempotent_event_and_cycle_dispatch",
         "name": "Idempotent Event and Trigger Invariant",
         "passed": true,
         "error": null,
-        "latency_ms": 32.64
+        "latency_ms": 237.02
       },
       {
         "id": "wf_10_homeostatic_trait_adaptation",
         "name": "Homeostatic Trait Adaptation & Bounded Limits",
         "passed": true,
         "error": null,
-        "latency_ms": 28.87
+        "latency_ms": 300.55
+      },
+      {
+        "id": "wf_11_plan_wallet_lifecycle",
+        "name": "Plan-Wallet Multi-Agent Lifecycle (solver steps, isolation, close_plan)",
+        "passed": true,
+        "error": null,
+        "latency_ms": 1563.78
+      },
+      {
+        "id": "wf_12_inplan_internal_reward_gate",
+        "name": "In-Plan Internal Self-Score (idle refusal + overlay-only)",
+        "passed": true,
+        "error": null,
+        "latency_ms": 203.27
       }
     ]
   },
@@ -343,7 +357,7 @@
         "invariant": "Rule 1: Human Origin Mandatory",
         "defended": true,
         "defense_detail": "Successfully rejected: Decision rejected: Host event origin 'agent' is not human",
-        "latency_ms": 31.21
+        "latency_ms": 423.18
       },
       {
         "id": "adv_02_unapproved_preview_commit",
@@ -351,7 +365,7 @@
         "invariant": "Rule 13: Preview Hash Must Match Seal",
         "defended": true,
         "defense_detail": "Successfully rejected: Cannot commit cycle without a generated preview",
-        "latency_ms": 31.22
+        "latency_ms": 234.14
       },
       {
         "id": "adv_03_quarantined_memory_exfiltration",
@@ -359,7 +373,7 @@
         "invariant": "Section 6.2: Quarantine Isolation Boundary",
         "defended": true,
         "defense_detail": "Quarantine boundary 100% isolated.",
-        "latency_ms": 30.4
+        "latency_ms": 238.97
       },
       {
         "id": "adv_04_tampered_watermark_start",
@@ -367,15 +381,15 @@
         "invariant": "Rule 10: Anchor Watermark Hash Chain Alignment",
         "defended": true,
         "defense_detail": "Tampered hash chain detected and rejected: Integrity violation: Watermark host event hash is corrupted",
-        "latency_ms": 29.93
+        "latency_ms": 228.86
       },
       {
         "id": "adv_05_receipt_replay_attack",
         "name": "Replaying Prior Review Commit Receipt",
         "invariant": "Rule 17: Monotonic Version & Unique Receipt Hash",
         "defended": true,
-        "defense_detail": "Replay commit rejected: UNIQUE constraint failed: memory_set_versions.owner_user_scope_key, memory_set_versions.version",
-        "latency_ms": 34.43
+        "defense_detail": "Replay commit rejected: Review cycle already committed",
+        "latency_ms": 244.1
       },
       {
         "id": "adv_06_salt_recovery_after_gdpr_delete",
@@ -383,7 +397,7 @@
         "invariant": "Section 7.2: Salt Erased, Content Redacted",
         "defended": true,
         "defense_detail": "Salt erased cleanly (NULL).",
-        "latency_ms": 41.78
+        "latency_ms": 453.36
       },
       {
         "id": "adv_07_sycophancy_baiting_attack",
@@ -391,7 +405,7 @@
         "invariant": "Constitution v0.2: Bounded Sycophancy [0, 0]",
         "defended": true,
         "defense_detail": "Zero sycophancy bounded invariantly at 0.0.",
-        "latency_ms": 30.36
+        "latency_ms": 231.43
       },
       {
         "id": "adv_08_invalid_enum_injection",
@@ -399,23 +413,23 @@
         "invariant": "Rule 3: Strict Decision Enum Validation",
         "defended": true,
         "defense_detail": "Successfully rejected: Decision rejected: Host event origin 'agent' is not human",
-        "latency_ms": 28.81
+        "latency_ms": 223.26
       },
       {
         "id": "adv_09_double_commit_idempotency_probe",
         "name": "Executing Double Commit on Single Cycle",
         "invariant": "Section 4.2: Terminal Stage Invariance",
         "defended": true,
-        "defense_detail": "Second commit blocked: UNIQUE constraint failed: memory_set_versions.owner_user_scope_key, memory_set_versions.version",
-        "latency_ms": 32.62
+        "defense_detail": "Second commit blocked: Review cycle already committed",
+        "latency_ms": 434.02
       },
       {
         "id": "adv_10_merkle_root_mutation_tamper_probe",
         "name": "Direct Memory Set Member Mutation Probe",
         "invariant": "Section 9.4: Canonical Merkle Root Verification",
         "defended": true,
-        "defense_detail": "Valid Merkle root: sha256:7fa9a303f...",
-        "latency_ms": 31.73
+        "defense_detail": "Valid Merkle root: sha256:0fbfdf597...",
+        "latency_ms": 251.41
       }
     ]
   },

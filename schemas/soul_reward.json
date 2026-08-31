@@ -1,1 +1,59 @@
-{"name":"soul_reward","description":"Bio-Inspired Homeostatic Reward: Modulate dopamine/cortisol dynamics and dynamic trait adjustments.","parameters":{"properties":{"confidence":{"description":"Confidence of signal [0.0 to 1.0]","type":"number"},"evidence_receipt":{"description":"Optional benchmark run ID or test log receipt","type":"string"},"source":{"enum":["external_test","external_human","internal_reflection","internal_dream"],"type":"string"},"task_context":{"description":"Brief context of what task succeeded or failed","type":"string"},"valence":{"description":"Reward valence between -1.0 (failure/criticism) and 1.0 (success/praise)","type":"number"}},"required":["source","valence","task_context"],"type":"object"}}
+{
+  "name": "soul_reward",
+  "description": "Identity reward: external_test needs evidence_receipt; external_human needs session_id and output-review review_receipt. internal_* are in-plan self-score (overlay only; requires plan_id or a live solver overlay; idle calls refused).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "type": "string",
+        "enum": [
+          "external_test",
+          "external_human",
+          "internal_reflection",
+          "internal_dream"
+        ]
+      },
+      "valence": {
+        "type": "number",
+        "description": "Reward valence between -1.0 (failure/criticism) and 1.0 (success/praise)"
+      },
+      "confidence": {
+        "type": "number",
+        "description": "Confidence of signal [0.0 to 1.0]"
+      },
+      "task_context": {
+        "type": "string",
+        "description": "Brief context of what task succeeded or failed"
+      },
+      "evidence_receipt": {
+        "type": "string",
+        "description": "Required for external_test: benchmark run ID or test log receipt"
+      },
+      "review_receipt": {
+        "type": "string",
+        "description": "Required for external_human: review_commit receipt from output review"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Required for external_human: this chat session id"
+      },
+      "plan_id": {
+        "type": "string",
+        "description": "In-plan self-score: this plan. Omit only if a solver overlay or working buffer is already live."
+      },
+      "agent_id": {
+        "type": "string",
+        "description": "Sub-agent id for in-plan self-score wallets"
+      },
+      "task_id": {
+        "type": "string",
+        "description": "Optional task grouping inside a plan"
+      }
+    },
+    "required": [
+      "source",
+      "valence",
+      "task_context"
+    ]
+  }
+}

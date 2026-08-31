@@ -1,0 +1,33 @@
+{
+  "name": "soul_dream_score",
+  "description": "Close the dream loop: score pending imagined outcomes against the realized result (dream-RPE), updating persistent expectations at half weight. Auto-fires on negative receipted external_test rewards. Requires evidence_receipt of a redeemed external_test reward for this task_context \u2014 unbacked scoring is refused.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "realized_valence": {
+        "type": "number",
+        "description": "Actual outcome valence in [-1, 1]"
+      },
+      "confidence": {
+        "type": "number",
+        "description": "Confidence in [0, 1], default 1.0"
+      },
+      "task_context": {
+        "type": "string",
+        "description": "Context bucket; falls back to each dream's stored task_context"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Max unscored dreams to score, default 5"
+      },
+      "evidence_receipt": {
+        "type": "string",
+        "description": "Required: evidence_receipt of a redeemed external_test reward matching this task_context"
+      }
+    },
+    "required": [
+      "realized_valence",
+      "evidence_receipt"
+    ]
+  }
+}

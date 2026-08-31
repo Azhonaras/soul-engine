@@ -1,0 +1,59 @@
+{
+  "name": "soul_review_chat_commit",
+  "description": "Promote after this run's Review plan picks (remember / correct / session_only / reject), or when they typed /seacom, SEAL AND COMMIT, or COMMIT. Do not call at cycle start with no picks, or on idle/bye.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "cycle_id": {
+        "type": "string"
+      },
+      "user_scope_key": {
+        "type": "string",
+        "default": "default_user"
+      },
+      "project_scope_key": {
+        "type": "string"
+      },
+      "decisions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "candidate_id": {
+              "type": "string"
+            },
+            "decision": {
+              "type": "string",
+              "enum": [
+                "remember",
+                "correct",
+                "session_only",
+                "reject",
+                "defer",
+                "replace_old",
+                "keep_both_with_context",
+                "keep_old",
+                "reject_both"
+              ]
+            },
+            "corrected_text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "candidate_id",
+            "decision"
+          ]
+        }
+      }
+    },
+    "required": [
+      "session_id",
+      "cycle_id",
+      "decisions"
+    ]
+  }
+}

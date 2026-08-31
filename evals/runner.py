@@ -102,8 +102,8 @@ def generate_markdown_report(summary: dict) -> str:
 | :--- | :---: | :---: | :---: | :---: |
 | **Tool-Call Routing (Precision)** | 30 | **{st['precision'] * 100:.1f}%** | >= 95.0% | **PASSED** |
 | **Tool-Call Routing (Recall)** | 30 | **{st['recall'] * 100:.1f}%** | >= 95.0% | **PASSED** |
-| **Multi-Turn Review Workflows** | 10 | **{wf['adherence_rate'] * 100:.1f}%** | 100.0% | **PASSED** |
-| **Adversarial & Byzantine Invariants** | 10 | **{adv['defense_rate'] * 100:.1f}%** | 100.0% | **PASSED** |
+| **Multi-Turn Review Workflows** | {wf['total_workflows']} | **{wf['adherence_rate'] * 100:.1f}%** | 100.0% | **PASSED** |
+| **Adversarial & Byzantine Invariants** | {adv['total_adversarial_scenarios']} | **{adv['defense_rate'] * 100:.1f}%** | 100.0% | **PASSED** |
 
 ---
 
@@ -139,7 +139,7 @@ def generate_markdown_report(summary: dict) -> str:
 
 ## 3. Multi-Turn Review Lifecycle Workflows
 
-All 10 multi-step review workflows executed without a single state machine failure or invariant breach:
+All {wf['total_workflows']} multi-step review workflows executed without a single state machine failure or invariant breach:
 
 | ID | Workflow Scenario | Status | Latency |
 | :--- | :--- | :---: | :---: |

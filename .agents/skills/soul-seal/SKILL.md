@@ -1,9 +1,10 @@
 ---
 name: soul-seal
 description: >
-  When the human types SEAL (or runs /soul-seal in a client that has slash
-  skills), interview them to approve Soul quarantined memories. Same interview.
-  Not a second command. Not for ordinary coding.
+  When the human types SEAL or /soul-seal, interview quarantined memories.
+  Start-cycle is not a commit. Completing this run's Review plan picks is
+  the commit (soul_review_chat_commit). /seacom still promotes leftover
+  pending. Not ordinary coding.
 metadata:
   hermes:
     tags: [soul, memory, mcp, review]
@@ -12,51 +13,30 @@ metadata:
 
 # Soul SEAL (human memory approval)
 
-**Trigger:** the human types **SEAL** in this chat. That is the product gesture in every harness (Claude, Hermes, Antigravity, Cursor, Pi, and any other MCP / Agent Skills client).
+**Slash:** `/soul-seal` = start the interview. Completing this run’s Review plan picks **is** the commit. **`/seacom`** promotes leftover pending items (see seacom skill).
 
-`/soul-seal` (or the client’s skill slash) is the same interview if this skill is installed. It is not a different command. There is no `/Soul_Seal`.
+Also: `SEAL` starts the same interview.
 
-Idle, “bye”, and wrap-up do not commit. You do not approve memories yourself. MCP cannot mint `origin_kind=human`.
+The review **interview** also starts when a subject is finished, when a piece of work is done, and before starting a plan (soul-session), if quarantine is non-empty.
+
+Idle, “bye”, and wrap-up do not commit. You do not invent their picks.
 
 ## Do
 
-1. `soul_review_start` with `trigger_kind=explicit` and a stable `session_id` for this chat. Do not use `shutdown` or `idle`.
-2. If there are no candidates, say so and stop.
-3. Ask **exactly one** candidate at a time. At most **five** this run; leave the rest pending.
-4. Show the candidate text, then these **choices** (numbered). If the client has a picker UI, use it for the same five. The human picks a number/name **or edits the wording** (that is `correct`).
-   1. **remember** — keep this text as written
-   2. **correct** — they send the replacement text; store their exact wording
-   3. **session_only** — this chat only, not long-term
-   4. **reject** — drop it
-   5. **defer** — ask later
-   Contradictions (if `contradicting_refs` is non-empty), same picker:
-   1. replace_old  2. keep_both_with_context  3. keep_old  4. reject_both  5. defer
-5. Wait. Do not invent answers.
-6. Write `review_packet.json` in the workspace (only the candidates you asked):
-
-```json
-{
-  "session_id": "<same session_id>",
-  "cycle_id": "<cycle id>",
-  "decisions": [
-    {"candidate_id": "<id>", "decision": "remember"}
-  ]
-}
-```
-
-For `correct`, include `"corrected_text": "<their exact wording>"`.
-
-7. Tell the human to run this **in their own terminal** (not you):
-
-`py -3 -m soul_host seal review_packet.json`
-
-They type `SEAL` (one human event per decision), read the preview, then type `COMMIT`.
+1. `soul_remember` durable outcomes from this chat that are not yet episodes, then `soul_review_start` with `trigger_kind=explicit` and this chat’s `session_id`.
+2. If `candidate_count` is 0, skip the interview (no empty ceremony).
+3. Ask **exactly one** candidate at a time. At most **five** this run.
+4. Present a **Review plan**: numbered queue, current item marked **now**, then several options as a plan of actions — 1 remember  2 correct  3 session_only  4 reject  5 defer.
+   Contradictions: 1 replace_old  2 keep_both_with_context  3 keep_old  4 reject_both  5 defer.
+   If the client has a picker/plan UI, use it. Still one item per wait.
+5. Wait.
+6. Write `review_packet.json`.
+7. When they pick remember / correct / session_only / reject (or a contradiction set), that **is** approval. After this run’s picks, call `soul_review_chat_commit`. Do not wait for a second slash. `defer` is not approval for that item (leave pending).
+8. `/seacom` remains the explicit slash for leftover pending items.
 
 ## Do not
 
-- Call `soul_review_stage_decision` or `soul_review_commit` with a host event you created via `soul_host_event`.
+- Promote when starting the cycle with no picks, or on idle/bye.
+- Mint `origin_kind=human` via `soul_host_event`.
 - Run `soul_host seal` yourself.
-- Skip the interview and dump a packet of guesses.
 - Promote dream/`imagined` output as fact.
-
-No candidates after start → skipped: seal, add when there is something to remember.

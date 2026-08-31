@@ -1,5 +1,10 @@
 include skills/soul-seal/SKILL.md
+include skills/seacom/SKILL.md
+include docs/CONSTITUTION.md
 include .claude/skills/soul-seal/SKILL.md
+include .claude/skills/seacom/SKILL.md
 include .cursor/skills/soul-seal/SKILL.md
+include .cursor/skills/seacom/SKILL.md
 include .agents/skills/soul-seal/SKILL.md
+include .agents/skills/seacom/SKILL.md
 recursive-include schemas *.json

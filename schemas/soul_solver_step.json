@@ -1,0 +1,62 @@
+{
+  "name": "soul_solver_step",
+  "description": "Record a receipted solver fail/succeed/dead_end. Refuses if this session has pending review candidates. Session overlay only.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "tool": {
+        "type": "string",
+        "description": "What was invoked (test runner, edit, grep, sub-agent, \u2026)"
+      },
+      "method": {
+        "type": "string",
+        "description": "How it was used"
+      },
+      "outcome": {
+        "type": "string",
+        "enum": [
+          "fail",
+          "succeed",
+          "dead_end"
+        ]
+      },
+      "receipt": {
+        "type": "string",
+        "description": "Test id, command exit, or check id. Required."
+      },
+      "error": {
+        "type": "string"
+      },
+      "options_left": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "session_id": {
+        "type": "string"
+      },
+      "plan_id": {
+        "type": "string"
+      },
+      "agent_id": {
+        "type": "string",
+        "description": "Sub-agent id; parent omits or uses empty"
+      },
+      "task_id": {
+        "type": "string",
+        "description": "Optional task grouping inside a plan"
+      },
+      "close_plan": {
+        "type": "boolean",
+        "description": "Quarantine compact traces for this plan_id, then drop overlay. Not soul_states."
+      }
+    },
+    "required": [
+      "tool",
+      "method",
+      "outcome",
+      "receipt"
+    ]
+  }
+}

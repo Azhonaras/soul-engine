@@ -212,7 +212,7 @@ class TestSoulReviewEngine(unittest.TestCase):
             user_scope_key="default_user",
             origin_kind="human",
             event_kind="review_decision",
-            payload={"confirmed_text": "User strictly requires 4 spaces per indentation level."}
+            payload={"corrected_text": "User strictly requires 4 spaces per indentation level."}
         )
 
         # Valid correction with confirmation event
@@ -502,10 +502,72 @@ class TestSoulReviewEngine(unittest.TestCase):
         self.assertEqual(text_commit["status"], "success")
         self.assertEqual(text_commit["receipt"]["status"], "committed")
 
+    def test_09b_chat_commit_promotes_without_tty(self):
+        os.environ["SOUL_DB_PATH"] = self.db_path
+        import soul_mcp_server
+        soul_mcp_server._kernel = self.kernel
+        self.kernel.ingest_experience(EpisodeInput(
+            source_kind="human", provenance="observed", content="Chat commit fact about tea"
+        ))
+        started = _handle_jsonrpc({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "soul_review_start", "arguments": {"session_id": "chat_commit_sess"}},
+        })
+        body = json.loads(started["result"]["content"][0]["text"])
+        cycle_id = body["review_cycle"]["cycle_id"]
+        cand_id = body["review_cycle"]["candidates"][0]["id"]
+        done = _handle_jsonrpc({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {
+                "name": "soul_review_chat_commit",
+                "arguments": {
+                    "session_id": "chat_commit_sess",
+                    "cycle_id": cycle_id,
+                    "decisions": [{"candidate_id": cand_id, "decision": "remember"}],
+                },
+            },
+        })
+        out = json.loads(done["result"]["content"][0]["text"])
+        self.assertEqual(out["status"], "committed")
+        facts = self.kernel.recall_memories(query="tea", limit=5)
+        self.assertTrue(any("tea" in (f.get("content") or "") for f in facts))
+        again = _handle_jsonrpc({
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": {
+                "name": "soul_review_chat_commit",
+                "arguments": {
+                    "session_id": "chat_commit_sess",
+                    "cycle_id": cycle_id,
+                    "decisions": [{"candidate_id": cand_id, "decision": "remember"}],
+                },
+            },
+        })
+        replay = json.loads(again["result"]["content"][0]["text"])
+        self.assertEqual(replay["status"], "committed")
+        self.assertEqual(
+            replay["result"]["receipt"]["receipt_id"],
+            out["result"]["receipt"]["receipt_id"],
+        )
+
+    def test_09c_previewed_cycle_is_reused_not_forked(self):
+        self.kernel.ingest_experience(EpisodeInput(
+            source_kind="human", provenance="observed", content="Reuse previewed cycle note"
+        ))
+        first = self.kernel.start_review_cycle(session_id="sess_reuse")
+        cand = first["candidates"][0]["id"]
+        human = self.kernel.record_host_event(session_id="sess_reuse", origin_kind="human", payload="pick")
+        self.kernel.record_review_decision(
+            cycle_id=first["cycle_id"], candidate_id=cand, decision="remember", human_event_ref=human.id
+        )
+        self.kernel.preview_review_cycle(cycle_id=first["cycle_id"])
+        second = self.kernel.start_review_cycle(session_id="sess_reuse")
+        self.assertEqual(second["cycle_id"], first["cycle_id"])
+        self.assertGreaterEqual(second["candidate_count"], 1)
+
     def test_10_contradiction_resolution_and_supersession(self):
         """Test contradiction handling (replace_old) where previous memory is superseded and omitted from active set."""
         # 1. Establish initial memory: "User prefers Dark Mode"
-        self.kernel.ingest_experience(EpisodeInput(source_kind="human", provenance="observed", content="User prefers Dark Mode"))
+        self.kernel.ingest_experience(EpisodeInput(source_kind="human", provenance="observed", content="User prefers Dark Mode", entity_key="pref.theme"))
         h_ev1 = self.kernel.record_host_event(session_id="sess_contra", origin_kind="human", payload="start1")
         c1 = self.kernel.start_review_cycle(session_id="sess_contra")
         c1_id = c1["cycle_id"]
@@ -517,15 +579,11 @@ class TestSoulReviewEngine(unittest.TestCase):
         old_mem_id = res1["affected_memories"][0]
 
         # 2. Ingest contradicting candidate: "User switched preference to Light Mode"
-        self.kernel.ingest_experience(EpisodeInput(source_kind="human", provenance="observed", content="User switched preference to Light Mode"))
+        self.kernel.ingest_experience(EpisodeInput(source_kind="human", provenance="observed", content="User switched preference to Light Mode", entity_key="pref.theme"))
         h_ev2 = self.kernel.record_host_event(session_id="sess_contra", origin_kind="human", payload="start2")
         c2 = self.kernel.start_review_cycle(session_id="sess_contra")
         c2_id = c2["cycle_id"]
         cand2_id = c2["candidates"][0]["id"]
-
-        # Manually link the contradiction ref to the old memory ID to simulate contradiction detection
-        with self.kernel._lock, self.kernel._get_conn() as conn:
-            conn.execute("UPDATE memory_candidates SET contradicting_refs_json = ? WHERE id = ?;", (json.dumps([old_mem_id]), cand2_id))
 
         self.kernel.record_review_decision(cycle_id=c2_id, candidate_id=cand2_id, decision="replace_old", human_event_ref=h_ev2.id)
         self.kernel.preview_review_cycle(cycle_id=c2_id)

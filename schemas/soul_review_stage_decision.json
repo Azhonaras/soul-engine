@@ -1,1 +1,49 @@
-{"name":"soul_review_stage_decision","description":"Stage a human review decision (remember, correct, session_only, reject, defer, replace_old).","parameters":{"properties":{"candidate_id":{"type":"string"},"corrected_text":{"type":"string"},"correction_confirmation_event_ref":{"type":"string"},"cycle_id":{"type":"string"},"decision":{"enum":["remember","correct","session_only","reject","defer","replace_old","keep_both_with_context","keep_old","reject_both"],"type":"string"},"human_event_ref":{"description":"Host event ID establishing human origin","type":"string"},"user_scope_key":{"default":"default_user","type":"string"}},"required":["cycle_id","candidate_id","decision","human_event_ref"],"type":"object"}}
+{
+  "name": "soul_review_stage_decision",
+  "description": "Stage a human review decision (remember, correct, session_only, reject, defer, replace_old).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "cycle_id": {
+        "type": "string"
+      },
+      "candidate_id": {
+        "type": "string"
+      },
+      "decision": {
+        "type": "string",
+        "enum": [
+          "remember",
+          "correct",
+          "session_only",
+          "reject",
+          "defer",
+          "replace_old",
+          "keep_both_with_context",
+          "keep_old",
+          "reject_both"
+        ]
+      },
+      "human_event_ref": {
+        "type": "string",
+        "description": "Host event ID establishing human origin"
+      },
+      "user_scope_key": {
+        "type": "string",
+        "default": "default_user"
+      },
+      "corrected_text": {
+        "type": "string"
+      },
+      "correction_confirmation_event_ref": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cycle_id",
+      "candidate_id",
+      "decision",
+      "human_event_ref"
+    ]
+  }
+}

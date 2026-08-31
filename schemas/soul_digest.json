@@ -1,1 +1,21 @@
-{"name":"soul_digest","description":"Compact traits + neuromodulators + reviewed facts. Unreviewed episodes are omitted.","parameters":{"properties":{"limit":{"default":5,"type":"integer"}},"type":"object"}}
+{
+  "name": "soul_digest",
+  "description": "Session start: traits, behavior orders, due flags, this-plan working traces, session overlay, and newest reviewed facts. Follow behavior. Unreviewed episodes omitted.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "default": 5
+      },
+      "plan_id": {
+        "type": "string",
+        "description": "Optional: this-plan working + overlay"
+      },
+      "agent_id": {
+        "type": "string",
+        "description": "Optional: this sub-agent overlay and traces"
+      }
+    }
+  }
+}

@@ -62,10 +62,11 @@ def main():
         rew_resp = call_mcp_tool(proc, "tools/call", {
             "name": "soul_reward",
             "arguments": {
-                "source": "client_example",
+                "source": "external_test",
                 "valence": 1.0,
                 "confidence": 1.0,
-                "task_context": "Validated successful MCP client round-trip."
+                "task_context": "Validated successful MCP client round-trip.",
+                "evidence_receipt": "mcp_roundtrip_ok",
             }
         }, req_id=4)
         print("Reward Result:", json.dumps(json.loads(rew_resp.get("result", {}).get("content", [{}])[0].get("text", "{}")), indent=2))

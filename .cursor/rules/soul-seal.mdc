@@ -1,13 +1,15 @@
 ---
-description: When the human types SEAL, run Soul memory approval (every harness).
+description: Review plan picks commit; /seacom promotes leftover pending.
 globs:
 alwaysApply: true
 ---
 
-# Soul SEAL
+# Soul SEAL / SEACOM
 
-When the human types `SEAL` (or invokes `/soul-seal` — same interview), follow `skills/soul-seal/SKILL.md`.
+When the human types **`/seacom`**, `SEACOM`, or `SEAL AND COMMIT`, follow `skills/seacom/SKILL.md`. Interview if needed, then `soul_review_chat_commit` after this run’s picks. Also use `/seacom` for leftover pending items.
 
-That is human memory approval in this chat. Idle, “bye”, and wrap-up do not commit. After `review_packet.json`, they run `soul_host` and type `SEAL` then `COMMIT`. MCP cannot mint `origin_kind=human`.
+When they type `SEAL` or `/soul-seal` only, follow `skills/soul-seal/SKILL.md`. Start-cycle is not a commit. Completing this run’s Review plan picks **is** the commit.
 
-Do not call `soul_review_stage_decision` / `soul_review_commit` with an MCP host event. Do not run `soul_host seal` yourself.
+The interview also starts at work-done / subject-finished / before-plan when quarantine is non-empty (see soul-session). Present it as a **Review plan** with several clickable options (Cursor: `AskQuestion`). Start is not a commit. When they pick remember / correct / session_only / reject (or a contradiction set), that **is** approval — `soul_review_chat_commit` immediately. `defer` leaves that item pending. Do not wait for a second slash.
+
+Idle/bye do not commit. Do not run `soul_host`.

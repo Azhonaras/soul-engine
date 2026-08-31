@@ -1,1 +1,24 @@
-{"name":"soul_memory_delete","description":"Execute GDPR-compliant Salted Privacy Deletion Cascade on a memory and its source episodes.","parameters":{"properties":{"human_event_ref":{"description":"Human host event ID authorizing the deletion","type":"string"},"memory_id":{"type":"string"},"user_scope_key":{"default":"default_user","type":"string"}},"required":["memory_id","human_event_ref"],"type":"object"}}
+{
+  "name": "soul_memory_delete",
+  "description": "Permanently delete a reviewed memory and cascade delete all its provenance history (GDPR right to be forgotten). Destructive operation requiring out-of-band authorization via 'soul-host delete-memory <id>'.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "memory_id": {
+        "type": "string",
+        "description": "Unique identifier of the reviewed memory to delete"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Chat session identifier for chat-authorized deletion"
+      },
+      "user_scope_key": {
+        "type": "string",
+        "default": "default_user"
+      }
+    },
+    "required": [
+      "memory_id"
+    ]
+  }
+}

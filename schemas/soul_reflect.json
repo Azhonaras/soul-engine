@@ -1,1 +1,27 @@
-{"name":"soul_reflect","description":"Reflection Engine: Analyze unresolved tensions and generate candidate interpretations.","parameters":{"properties":{},"type":"object"}}
+{
+  "name": "soul_reflect",
+  "description": "If no tensions: empty. Else first call returns evidence; second call stores agent interpretations. Does not write identity.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "interpretations": {
+        "type": "array",
+        "description": "Agent-written hypotheses. Omit on the first call.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "hypothesis": {
+              "type": "string"
+            },
+            "confidence": {
+              "type": "number"
+            },
+            "action": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

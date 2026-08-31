@@ -1,1 +1,34 @@
-{"name":"soul_review_start","description":"Open a Soul Review Cycle (watermark + extract). When the human types SEAL, call this with trigger_kind=explicit, then interview one candidate at a time.","parameters":{"properties":{"project_scope_key":{"type":"string"},"session_id":{"type":"string"},"trigger_kind":{"default":"explicit","enum":["explicit","new_session","archive","shutdown","replacement","idle"],"type":"string"},"user_scope_key":{"default":"default_user","type":"string"}},"required":["session_id"],"type":"object"}}
+{
+  "name": "soul_review_start",
+  "description": "Open a Soul Review Cycle (watermark + extract). Call when a subject is finished, when a piece of work is done, and before starting a plan if quarantine is non-empty; also when the human types SEAL or /seacom. trigger_kind=explicit. Interview as a Review plan with several options, one item at a time. Starting the cycle is not a commit. After this run's Review plan picks, call soul_review_chat_commit.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "user_scope_key": {
+        "type": "string",
+        "default": "default_user"
+      },
+      "project_scope_key": {
+        "type": "string"
+      },
+      "trigger_kind": {
+        "type": "string",
+        "enum": [
+          "explicit",
+          "new_session",
+          "archive",
+          "shutdown",
+          "replacement",
+          "idle"
+        ],
+        "default": "explicit"
+      }
+    },
+    "required": [
+      "session_id"
+    ]
+  }
+}

@@ -1,1 +1,22 @@
-{"name":"soul_heal","description":"Self-Healing Engine: Execute 3-tier repair escalation (Level 1: Recalibrate, Level 2: Soft Rollback, Level 3: Quarantine Freeze). Requires a real human host event; MCP cannot self-attest.","parameters":{"properties":{"human_event_ref":{"type":"string"},"level":{"enum":[1,2,3],"type":"integer"},"reason":{"type":"string"}},"required":["level","human_event_ref"],"type":"object"}}
+{
+  "name": "soul_heal",
+  "description": "Trigger automated state repair for the soul engine (level 1=routine recalibration, 2=rollback, 3=reset). Levels >= 2 are Tier 2 destructive operations requiring soul_host approval.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "level": {
+        "type": "integer",
+        "default": 1,
+        "description": "Healing level (1=homeostasis recalibration, 2=rollback, 3=quarantine freeze)"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Chat session identifier for chat-authorized level 1 heal"
+      },
+      "reason": {
+        "type": "string",
+        "default": "Automated health repair"
+      }
+    }
+  }
+}

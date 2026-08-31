@@ -1,1 +1,24 @@
-{"name":"soul_rollback","description":"Rollback Soul identity state to a verified prior version without deleting audit trail history. Requires a real human host event; MCP cannot self-attest.","parameters":{"properties":{"human_event_ref":{"type":"string"},"reason":{"type":"string"},"target_version":{"type":"integer"}},"required":["target_version","human_event_ref"],"type":"object"}}
+{
+  "name": "soul_rollback",
+  "description": "Revert the soul state and active identity traits to a previous exact version. This is a Tier 2 destructive operation requiring soul_host approval. Out-of-band authorization command: 'soul-host rollback <version>'.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "target_version": {
+        "type": "integer",
+        "description": "Target identity version number to revert to"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Chat session identifier for chat-authorized rollback"
+      },
+      "reason": {
+        "type": "string",
+        "default": "Operator manual rollback"
+      }
+    },
+    "required": [
+      "target_version"
+    ]
+  }
+}

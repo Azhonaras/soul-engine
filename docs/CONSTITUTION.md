@@ -166,16 +166,14 @@ These are design commitments, not claims of legal personhood or proven moral sta
 
 All human, agent, environmental, and internally generated claims begin as untrusted observations unless independently verified.
 
-```text
-input
-→ quarantined episodic record
-→ provenance and consent check
-→ privacy and security screening
-→ evidence and contradiction checks
-→ identity-impact assessment
-→ Dream-phase adversarial test when consequential
-→ promote via review commit (reviewed_memories), retain in quarantine, or delete
-```
+| Gate | Constitutional requirement | Implemented v1.2.0 boundary |
+| :--- | :--- | :--- |
+| **Admit** | Treat every claim as untrusted; retain provenance and consent context | Secret screen, immutable provenance, `episodes.trust_state = quarantined` |
+| **Screen** | Apply privacy, security, evidence, and contradiction checks | Privacy metadata + local top-5 token-overlap verification; no general consent-policy engine |
+| **Assess** | Consider identity impact; adversarially test consequential proposals | Reflection and Dream produce proposals only; neither authorizes a write |
+| **Govern** | Promote, retain, or delete under human authority | Review commit versions `reviewed_memories`; retention expiry and salted deletion are separate paths |
+
+Policy exceeds implementation where noted; the diagram must not imply a deployed consent or general identity-impact engine.
 
 ### 8.1 Required provenance classes
 
@@ -283,18 +281,13 @@ Triggers include:
 
 Repair sequence:
 
-```text
-detect
-→ preserve state and evidence
-→ pause affected autonomous updates
-→ isolate implicated memories and traits
-→ generate competing interpretations
-→ simulate consequences
-→ apply smallest reversible repair
-→ observe stability
-→ retain or roll back
-→ escalate if severe, persistent, repeated, or value-level
-```
+| Phase | Constitutional rule | Executable mechanism today |
+| :--- | :--- | :--- |
+| **Detect + preserve** | Preserve state and evidence before intervention | Versioned `soul_states`, hash-chained audit records, `heal_due` trigger |
+| **Bound** | Pause affected writes and use the smallest reversible repair | Level 1 recalibrates bounded traits halfway to defaults |
+| **Recover** | Retain or roll back without erasing history | Level 2 forward-restores the previous version; out-of-band approval required |
+| **Isolate + escalate** | Freeze severe instability and request human review | Level 3 sets `quarantine_frozen`; out-of-band approval required |
+| **Investigate** | Interpret, simulate, observe, and document | Reflection/Dream are available proposal tools, not an automatic healing pipeline |
 
 Moderate decline may start bounded repair. Severe, rapid, or persistent decline must freeze affected identity updates and request authorized human review.
 

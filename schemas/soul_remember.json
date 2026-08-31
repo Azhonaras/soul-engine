@@ -1,1 +1,78 @@
-{"name":"soul_remember","description":"Store interaction into Quarantine Memory with credential screening \u0026 entity key supersession.","parameters":{"properties":{"content":{"description":"Memory text or interaction content","type":"string"},"entity_key":{"description":"Optional entity key for single-current-value facts","type":"string"},"provenance":{"default":"observed","enum":["observed","reported","inferred","imagined","verified"],"type":"string"},"source_kind":{"default":"human","enum":["human","agent","environment","internal"],"type":"string"}},"required":["content"],"type":"object"}}
+{
+  "name": "soul_remember",
+  "description": "Quarantine a note. MCP cannot set source_kind=human.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "content": {
+        "type": "string",
+        "description": "Memory text or interaction content"
+      },
+      "source_kind": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "environment",
+          "internal"
+        ],
+        "default": "agent"
+      },
+      "provenance": {
+        "type": "string",
+        "enum": [
+          "observed",
+          "reported",
+          "inferred",
+          "imagined"
+        ],
+        "default": "observed"
+      },
+      "entity_key": {
+        "type": "string",
+        "description": "Optional entity key for single-current-value facts"
+      },
+      "occurred_at": {
+        "type": "string",
+        "description": "When the percept occurred (RFC3339). Defaults to created_at."
+      },
+      "source_ref": {
+        "type": "string",
+        "description": "Pseudonymous source identifier"
+      },
+      "medium": {
+        "type": "string",
+        "enum": [
+          "text",
+          "image",
+          "audio",
+          "video",
+          "document",
+          "sensor",
+          "mixed"
+        ]
+      },
+      "privacy_class": {
+        "type": "string",
+        "enum": [
+          "public",
+          "internal",
+          "personal",
+          "sensitive"
+        ]
+      },
+      "content_ref": {
+        "type": "string",
+        "description": "Pointer to payload; blobs are not stored"
+      },
+      "percept_json": {
+        "description": "Optional percept payload (object or JSON string). claims are NLI'd on verify. Max ~16k chars."
+      },
+      "session_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "content"
+    ]
+  }
+}
