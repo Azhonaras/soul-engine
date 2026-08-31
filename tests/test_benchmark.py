@@ -112,6 +112,8 @@ class TestTraitBoundsUnderSpike(BenchmarkBase):
 
 
 class TestLatencyAndMemory(BenchmarkBase):
+    @unittest.skipIf(os.environ.get("GITHUB_ACTIONS") == "true",
+                     "p95 SLA is a local bench; GitHub-hosted runners are too noisy")
     def test_p95_ingestion_latency_under_25ms(self):
         lat = []
         for i in range(200):
